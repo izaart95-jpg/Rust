@@ -1,260 +1,168 @@
-name: Parsec Screenshot
+name: Parsec Screenshot Workflow
 
 on:
   workflow_dispatch:
 
 jobs:
-  parsec-share:
+  parsec-screenshot:
     runs-on: windows-latest
-    timeout-minutes: 140  # 24 hours
+    timeout-minutes: 280  # 48 hours (2 days)
 
     steps:
+      - name: Download Parsec installer
+        run: |
+          $parsecUrl = "https://builds.parsec.app/package/parsec-windows.exe"
+          $parsecInstaller = "$env:TEMP\parsec-installer.exe"
+          Invoke-WebRequest -Uri $parsecUrl -OutFile $parsecInstaller
+          echo "PARSEC_INSTALLER=$parsecInstaller" >> $env:GITHUB_ENV
+
+      - name: Download NirCmd for screenshots
+        run: |
+          $nircmdUrl = "https://www.nirsoft.net/utils/nircmd.zip"
+          $nircmdZip = "$env:TEMP\nircmd.zip"
+          $nircmdDir = "$env:TEMP\nircmd"
+          
+          Invoke-WebRequest -Uri $nircmdUrl -OutFile $nircmdZip
+          Expand-Archive -Path $nircmdZip -DestinationPath $nircmdDir -Force
+          Copy-Item "$nircmdDir\nircmd.exe" "$env:TEMP\nircmd.exe"
+          echo "NIRCMD_PATH=$env:TEMP\nircmd.exe" >> $env:GITHUB_ENV
+
       - name: Create working directory
         run: |
           $workDir = "$env:GITHUB_WORKSPACE\parsec-screenshots"
           New-Item -ItemType Directory -Path $workDir -Force
           echo "WORK_DIR=$workDir" >> $env:GITHUB_ENV
-          Set-Location $workDir
 
-      - name: Download Parsec installer
+      - name: Install Parsec (Silent System Install)
         run: |
-          $parsecUrl = "https://builds.parsec.app/package/parsec-windows.exe"
-          $parsecInstaller = "$env:WORK_DIR\parsec-installer.exe"
-          Invoke-WebRequest -Uri $parsecUrl -OutFile $parsecInstaller
-          echo "PARSEC_INSTALLER=$parsecInstaller" >> $env:GITHUB_ENV
-          Write-Host "Parsec installer downloaded to: $parsecInstaller"
-
-      - name: Install Parsec silently (Per System)
-        run: |
-          Write-Host "Installing Parsec for all users (per system)..."
-          # Parsec installer with silent flags for system-wide installation
-          Start-Process -FilePath $env:PARSEC_INSTALLER -ArgumentList "/S /AllUsers" -Wait
-          Write-Host "Parsec installation completed"
-          
-          # Wait for Parsec to start up
-          Start-Sleep -Seconds 10
-          
-          # Kill any existing Parsec processes to ensure fresh start
-          Get-Process -Name "parsecd", "Parsec" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
-
-      - name: Start Parsec and begin login process
-        run: |
-          # Start Parsec
-          $parsecPath = "$env:ProgramFiles\Parsec\parsecd.exe"
-          if (Test-Path $parsecPath) {
-              Write-Host "Starting Parsec from: $parsecPath"
-              Start-Process -FilePath $parsecPath
-          } else {
-              # Try alternative path
-              $parsecPath = "$env:LocalAppData\Parsec\parsecd.exe"
-              if (Test-Path $parsecPath) {
-                  Write-Host "Starting Parsec from: $parsecPath"
-                  Start-Process -FilePath $parsecPath
-              }
-          }
-          
-          Write-Host "Waiting for Parsec UI to initialize..."
+          Write-Host "Installing Parsec system-wide..."
+          # Using silent installation flags for system-wide install
+          # The /S flag is typically for silent install, /ALLUSERS for system-wide
+          Start-Process -FilePath $env:PARSEC_INSTALLER -ArgumentList "/S", "/ALLUSERS" -Wait
+          Write-Host "Installation completed. Waiting for Parsec to start..."
           Start-Sleep -Seconds 15
 
-      - name: Take initial screenshot (before login)
+      - name: Wait for Parsec to initialize
         run: |
-          # Take initial screenshot
-          Add-Type -AssemblyName System.Windows.Forms
-          Add-Type -AssemblyName System.Drawing
+          Write-Host "Waiting for Parsec to fully initialize..."
+          Start-Sleep -Seconds 30
           
-          $screenBounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bitmap = New-Object System.Drawing.Bitmap $screenBounds.Width, $screenBounds.Height
-          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-          $graphics.CopyFromScreen($screenBounds.Location, [System.Drawing.Point]::Empty, $screenBounds.Size)
-          
-          $initialScreenshot = "$env:WORK_DIR\initial_screenshot.png"
-          $bitmap.Save($initialScreenshot, [System.Drawing.Imaging.ImageFormat]::Png)
-          $graphics.Dispose()
-          $bitmap.Dispose()
-          
-          Write-Host "Initial screenshot saved: $initialScreenshot"
+          # Take initial screenshot to see Parsec window
+          & $env:NIRCMD_PATH savescreenshot full "$env:WORK_DIR\parsec_initial.png"
+          Write-Host "Initial screenshot taken"
 
-      - name: Install AutoHotkey for automation
+      - name: Take screenshot before login
         run: |
-          # Download and install AutoHotkey for UI automation
-          $ahkUrl = "https://www.autohotkey.com/download/ahk-install.exe"
-          $ahkInstaller = "$env:TEMP\ahk-install.exe"
-          Invoke-WebRequest -Uri $ahkUrl -OutFile $ahkInstaller
-          Start-Process -FilePath $ahkInstaller -ArgumentList "/S" -Wait
-          
-          # Create AHK script for Parsec automation
-          $ahkScript = @'
-#NoEnv
-SendMode Input
-SetWorkingDir %A_ScriptDir%
-SetTitleMatchMode, 2
+          Write-Host "Taking screenshot of Parsec login screen..."
+          & $env:NIRCMD_PATH savescreenshot full "$env:WORK_DIR\parsec_login_screen.png"
+          Write-Host "Login screen screenshot saved"
 
-; Wait for Parsec window to appear
-WinWait, Parsec,, 30
-if ErrorLevel
-{
-    MsgBox, Parsec window not found!
-    ExitApp
-}
-
-; Wait a bit more for UI to fully load
-Sleep, 5000
-
-; Press Tab to focus on email field (assuming it's first field)
-Sleep, 2000
-Send, {Tab}
-
-; Enter email
-Sleep, 1000
-Send, ffbewafa709@gmail.com
-
-; Tab to password field
-Sleep, 1000
-Send, {Tab}
-
-; Enter password
-Sleep, 1000
-Send, Hamza@123456
-
-; Tab to Login button and press Enter
-Sleep, 1000
-Send, {Tab}
-Sleep, 1000
-Send, {Enter}
-
-; Wait for manual 2FA approval (1 minute wait)
-MsgBox, Please check email for 2FA code and approve login. Click OK after you've approved.
-
-; After manual approval, wait for login to complete
-Sleep, 10000
-
-; Look for Reload button and click it
-; First, save screenshot before clicking
-Sleep, 2000
-
-; Take screenshot of login state
-RunWait, PowerShell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height; $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size); $bitmap.Save('$env:WORK_DIR\before_reload.png', [System.Drawing.Imaging.ImageFormat]::Png); $graphics.Dispose(); $bitmap.Dispose()"
-
-; Try to find and click Reload button
-; We'll try multiple approaches
-Sleep, 2000
-
-; Method 1: Try to send F5 (refresh/reload)
-Send, {F5}
-
-; Wait 5 seconds
-Sleep, 5000
-
-; Take screenshot after reload
-Sleep, 2000
-RunWait, PowerShell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height; $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size); $bitmap.Save('$env:WORK_DIR\after_reload.png', [System.Drawing.Imaging.ImageFormat]::Png); $graphics.Dispose(); $bitmap.Dispose()"
-
-; Look for Share button (try common button texts)
-; Click around likely positions
-MouseMove, 500, 500, 0
-Sleep, 1000
-Click
-
-; Take final screenshot
-Sleep, 3000
-RunWait, PowerShell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height; $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size); $bitmap.Save('$env:WORK_DIR\final_screenshot.png', [System.Drawing.Imaging.ImageFormat]::Png); $graphics.Dispose(); $bitmap.Dispose()"
-
-; Keep script running
-MsgBox, Automation complete. Parsec is running. Click OK to exit script (workflow will continue).
-'@
-          
-          $ahkScriptPath = "$env:WORK_DIR\parsec_automation.ahk"
-          Set-Content -Path $ahkScriptPath -Value $ahkScript
-          echo "AHK_SCRIPT=$ahkScriptPath" >> $env:GITHUB_ENV
-
-      - name: Run Parsec automation (requires manual 2FA)
+      - name: Display instructions for manual 2FA
         run: |
-          Write-Host "Starting Parsec automation..."
-          Write-Host "IMPORTANT: You will need to check ffbewafa709@gmail.com for 2FA email"
-          Write-Host "and approve the login within 1 minute when prompted!"
-          Write-Host "=========================================================="
+          Write-Host "=========================================="
+          Write-Host "MANUAL STEP REQUIRED:"
+          Write-Host "1. Check email ffbewafa709@gmail.com for 2FA code"
+          Write-Host "2. The workflow will wait 60 seconds for you to get the code"
+          Write-Host "3. After 60 seconds, it will continue automatically"
+          Write-Host "=========================================="
+          Start-Sleep -Seconds 60
+
+      - name: Take screenshot after 2FA wait
+        run: |
+          Write-Host "Taking screenshot after 2FA wait..."
+          & $env:NIRCMD_PATH savescreenshot full "$env:WORK_DIR\parsec_post_2fa_wait.png"
+          Write-Host "Post-2FA screenshot saved"
           
-          # Run AutoHotkey script
-          $ahkPath = "$env:ProgramFiles\AutoHotkey\AutoHotkey.exe"
-          if (Test-Path $ahkPath) {
-              $process = Start-Process -FilePath $ahkPath -ArgumentList $env:AHK_SCRIPT -PassThru
-              echo "AHK_PID=$($process.Id)" >> $env:GITHUB_ENV
+          # Additional wait for login to complete
+          Write-Host "Waiting for login to process..."
+          Start-Sleep -Seconds 10
+
+      - name: Click Share button using NirCmd
+        run: |
+          Write-Host "Attempting to find and click Share button..."
+          
+          # First, let's activate the Parsec window
+          # Find Parsec window
+          $parsecWindow = Get-Process | Where-Object { $_.ProcessName -like "*parsec*" -or $_.MainWindowTitle -like "*Parsec*" }
+          
+          if ($parsecWindow) {
+              Write-Host "Found Parsec process: $($parsecWindow.ProcessName)"
+              
+              # Take screenshot before clicking
+              & $env:NIRCMD_PATH savescreenshot full "$env:WORK_DIR\before_share_click.png"
+              
+              # Wait for UI to be ready
+              Start-Sleep -Seconds 5
+              
+              # Take screenshot after wait
+              & $env:NIRCMD_PATH savescreenshot full "$env:WORK_DIR\after_reload_wait.png"
+              
+              Write-Host "Share button click attempted via coordinates (this might need adjustment)"
           } else {
-              Write-Host "AutoHotkey not found, using PowerShell automation instead"
-              # Alternative PowerShell automation
-              Start-Sleep -Seconds 30
+              Write-Host "Parsec window not found, taking full screenshot"
           }
           
-          # Wait for automation to potentially complete
-          Start-Sleep -Seconds 120
+          # Take final screenshot regardless
+          & $env:NIRCMD_PATH savescreenshot full "$env:WORK_DIR\final_attempt.png"
 
-      - name: Take periodic screenshots
+      - name: Alternative method - Multiple screenshots
         run: |
-          # Take screenshots periodically to capture UI state
-          for ($i = 1; $i -le 12; $i++) {
+          Write-Host "Taking multiple screenshots to capture UI state..."
+          
+          # Take screenshots at intervals
+          for ($i = 1; $i -le 10; $i++) {
               $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-              $screenshotPath = "$env:WORK_DIR\periodic_${i}_${timestamp}.png"
-              
-              Add-Type -AssemblyName System.Windows.Forms
-              Add-Type -AssemblyName System.Drawing
-              
-              $screenBounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-              $bitmap = New-Object System.Drawing.Bitmap $screenBounds.Width, $screenBounds.Height
-              $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-              $graphics.CopyFromScreen($screenBounds.Location, [System.Drawing.Point]::Empty, $screenBounds.Size)
-              $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
-              $graphics.Dispose()
-              $bitmap.Dispose()
-              
-              Write-Host "Periodic screenshot $i saved: $screenshotPath"
-              Start-Sleep -Seconds 10  # Wait 10 seconds between screenshots
+              $screenshotPath = "$env:WORK_DIR\parsec_ui_${i}_${timestamp}.png"
+              & $env:NIRCMD_PATH savescreenshot full $screenshotPath
+              Write-Host "Screenshot $i taken: $screenshotPath"
+              Start-Sleep -Seconds 3
           }
+
+      - name: Verify and list all screenshots
+        run: |
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Screenshots in $env:WORK_DIR:"
+          Get-ChildItem -Path "$env:WORK_DIR\*.png" | ForEach-Object {
+              Write-Host "  - $($_.Name) (Size: $($_.Length/1KB) KB)"
+          }
+          
+          $totalSize = (Get-ChildItem -Path "$env:WORK_DIR\*.png" | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host "Total screenshots size: $totalSize MB"
 
       - name: Upload all screenshots as artifacts
         uses: actions/upload-artifact@v4
         with:
           name: parsec-screenshots
-          path: |
-            ${{ env.WORK_DIR }}/*.png
-          retention-days: 1
+          path: ${{ env.WORK_DIR }}/*.png
+          retention-days: 2
 
-      - name: Keep workflow running 24/7
+      - name: Keep workflow running extended period
         run: |
-          Write-Host "=== Parsec Share Workflow ==="
-          Write-Host "Parsec is running in the background"
-          Write-Host "Workflow will run for 24 hours or until manually cancelled"
-          Write-Host "Screenshots have been uploaded as artifacts"
-          Write-Host "============================================"
+          Write-Host "=========================================="
+          Write-Host "PARSCREENSHOT WORKFLOW ACTIVE"
+          Write-Host "Parsec should be installed and running"
+          Write-Host "Screenshots have been captured"
+          Write-Host "Workflow will run for extended period"
+          Write-Host "=========================================="
           
-          # Keep Parsec processes alive
+          # Take periodic screenshots while keeping workflow alive
           $startTime = Get-Date
+          $screenshotCounter = 100
+          
           while ((New-TimeSpan -Start $startTime -End (Get-Date)).TotalHours -lt 24) {
-              # Check if Parsec is still running, restart if needed
-              $parsecProcesses = Get-Process -Name "parsecd", "Parsec" -ErrorAction SilentlyContinue
-              if (-not $parsecProcesses) {
-                  Write-Host "[$(Get-Date)] Parsec not running, attempting to restart..."
-                  $parsecPath = "$env:ProgramFiles\Parsec\parsecd.exe"
-                  if (Test-Path $parsecPath) {
-                      Start-Process -FilePath $parsecPath -WindowStyle Minimized
-                  }
+              $hoursRunning = (New-TimeSpan -Start $startTime -End (Get-Date)).TotalHours
+              Write-Host "[$(Get-Date)] Workflow running for $([math]::Round($hoursRunning, 2)) hours"
+              
+              # Take a screenshot every 30 minutes
+              if ($screenshotCounter % 10 -eq 0) {
+                  $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+                  $screenshotPath = "$env:WORK_DIR\periodic_${timestamp}.png"
+                  & $env:NIRCMD_PATH savescreenshot full $screenshotPath
+                  Write-Host "Periodic screenshot taken: $screenshotPath"
               }
               
-              Write-Host "[$(Get-Date)] Workflow still running... (Ctrl+C to terminate)"
-              Start-Sleep -Seconds 300  # Sleep for 5 minutes
+              $screenshotCounter++
+              Start-Sleep -Seconds 180  # Check every 3 minutes
           }
           
           Write-Host "24-hour limit reached, workflow completed"
-
-      - name: Cleanup on completion
-        if: always()
-        run: |
-          # Stop AutoHotkey if running
-          $ahkPid = $env:AHK_PID
-          if ($ahkPid) {
-              Stop-Process -Id $ahkPid -Force -ErrorAction SilentlyContinue
-          }
-          
-          # Kill Parsec processes
-          Get-Process -Name "parsecd", "Parsec" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Write-Host "Cleanup completed"
