@@ -6,56 +6,46 @@ on:
 jobs:
   execute:
     runs-on: windows-latest
-    timeout-minutes: 190
+    timeout-minutes: 140
 
     steps:
       - name: Setup Environment
+        shell: powershell
         run: |
-          # Decode function
           function Decode-B64 {
               param([string]$input)
               return [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($input))
           }
 
-          # Decoded values
           $parsecUrl = Decode-B64 'aHR0cHM6Ly9idWlsZHMucGFyc2VjLmFwcC9wYWNrYWdlL3BhcnNlYy13aW5kb3dzLmV4ZQ=='
           $ahkUrl = Decode-B64 'aHR0cHM6Ly93d3cuYXV0b2hvdGtleS5jb20vZG93bmxvYWQvYW5rLWluc3RhbGwuZXhl'
           $email = Decode-B64 'ZmZiZXdhZmE3MDlAZ21haWwuY29t'
           $password = Decode-B64 'SGFtemFAMTIzNDU2'
 
-          # Create working directory
           $workDir = "$env:TEMP\parsec_" + (Get-Date -Format "yyyyMMdd_HHmmss")
           New-Item -ItemType Directory -Path $workDir -Force | Out-Null
 
-          # Set environment variables
-          echo "WORK_DIR=$workDir" >> $env:GITHUB_ENV
-          echo "EMAIL=$email" >> $env:GITHUB_ENV
-          echo "PASSWORD=$password" >> $env:GITHUB_ENV
+          echo "WORK_DIR=$workDir"     >> $env:GITHUB_ENV
+          echo "EMAIL=$email"          >> $env:GITHUB_ENV
+          echo "PASSWORD=$password"    >> $env:GITHUB_ENV
 
       - name: Download and Install Software
+        shell: powershell
         run: |
-          # Download Parsec
           $parsecInstaller = "$env:WORK_DIR\parsec.exe"
-          Invoke-WebRequest -Uri 'https://builds.parsec.app/package/parsec-windows.exe' -OutFile $parsecInstaller
+          Invoke-WebRequest -Uri "https://builds.parsec.app/package/parsec-windows.exe" -OutFile $parsecInstaller
 
-          # Download AutoHotkey
           $ahkInstaller = "$env:WORK_DIR\autohotkey.exe"
-          Invoke-WebRequest -Uri 'https://www.autohotkey.com/download/ahk-install.exe' -OutFile $ahkInstaller
+          Invoke-WebRequest -Uri "https://www.autohotkey.com/download/ahk-install.exe" -OutFile $ahkInstaller
 
-          # Install Parsec (silent)
-          Write-Host "Installing Parsec..."
-          Start-Process -FilePath $parsecInstaller -ArgumentList "/S /AllUsers" -Wait -NoNewWindow
-
-          # Install AutoHotkey
-          Write-Host "Installing AutoHotkey..."
-          Start-Process -FilePath $ahkInstaller -ArgumentList "/S" -Wait -NoNewWindow
-
-          Start-Sleep -Seconds 10
+          Start-Process $parsecInstaller -ArgumentList "/S /AllUsers" -Wait
+          Start-Process $ahkInstaller -ArgumentList "/S" -Wait
 
       - name: Start Parsec
+        shell: powershell
         run: |
           $parsecPath = "$env:ProgramFiles\Parsec\parsecd.exe"
-          if (-not (Test-Path $parsecPath)) {
+          if (!(Test-Path $parsecPath)) {
               $parsecPath = "${env:ProgramFiles(x86)}\Parsec\parsecd.exe"
           }
           if (Test-Path $parsecPath) {
@@ -64,110 +54,52 @@ jobs:
           Start-Sleep -Seconds 15
 
       - name: Create Automation Script
+        shell: powershell
         run: |
-          $ahkScript = @"
+          $ahkScript = @'
 #NoTrayIcon
 SetTitleMatchMode, 2
-
 WinWait, Parsec,, 45
-if ErrorLevel
-{
-    MsgBox, Parsec window not found!
-    ExitApp
-}
-
 Sleep, 8000
 Send, {Tab}
 Sleep, 1500
-Send, $env:EMAIL
+Send, %EMAIL%
 Sleep, 1500
-
 Send, {Tab}
 Sleep, 1500
-Send, $env:PASSWORD
+Send, %PASSWORD%
 Sleep, 1500
-
 Send, {Tab}
-Sleep, 500
 Send, {Tab}
-Sleep, 500
 Send, {Enter}
-
-MsgBox, 64, Action Required, Please complete 2FA then Press OK.
-
+MsgBox, 64, Action Required, Complete 2FA then press OK.
 Sleep, 15000
 Send, {F5}
-Sleep, 7000
-
-Loop, 20
-{
-    RunWait, powershell -WindowStyle Hidden -Command "& {
-        Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -AssemblyName System.Drawing
-        `$screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-        `$bitmap = New-Object System.Drawing.Bitmap `$screen.Width, `$screen.Height
-        `$graphics = [System.Drawing.Graphics]::FromImage(`$bitmap)
-        `$graphics.CopyFromScreen(`$screen.Location, [System.Drawing.Point]::Empty, `$screen.Size)
-        `$bitmap.Save('$env:WORK_DIR\screenshot_' + `$A_Index + '.png', [System.Drawing.Imaging.ImageFormat]::Png)
-        `$graphics.Dispose()
-        `$bitmap.Dispose()
-    }"
+Loop, 20 {
     Sleep, 10000
 }
-
-MsgBox, Automation complete.
 ExitApp
-"@
+'@
 
           $scriptPath = "$env:WORK_DIR\automation.ahk"
           Set-Content -Path $scriptPath -Value $ahkScript
           echo "SCRIPT_PATH=$scriptPath" >> $env:GITHUB_ENV
 
       - name: Run Automation
+        shell: powershell
         run: |
           $ahkPath = "$env:ProgramFiles\AutoHotkey\AutoHotkey.exe"
-          if (-not (Test-Path $ahkPath)) {
+          if (!(Test-Path $ahkPath)) {
               $ahkPath = "${env:ProgramFiles(x86)}\AutoHotkey\AutoHotkey.exe"
           }
-          if (Test-Path $ahkPath) {
-              Start-Process -FilePath $ahkPath -ArgumentList $env:SCRIPT_PATH -WindowStyle Hidden
-          }
+          Start-Process -FilePath $ahkPath -ArgumentList $env:SCRIPT_PATH -WindowStyle Hidden
           Start-Sleep -Seconds 30
 
       - name: Monitor and Keep Alive
+        shell: powershell
         run: |
-          Write-Host "=== Monitoring Started (24h) ==="
-
-          $startTime = Get-Date
-          $screenshotCount = 0
-
-          while ((New-TimeSpan -Start $startTime -End (Get-Date)).TotalHours -lt 24) {
-
-              if (($screenshotCount % 12) -eq 0) {
-                  $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-                  $shot = "$env:WORK_DIR\monitor_$timestamp.png"
-
-                  Add-Type -AssemblyName System.Windows.Forms
-                  Add-Type -AssemblyName System.Drawing
-
-                  $scr = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-                  $bmp = New-Object System.Drawing.Bitmap $scr.Width, $scr.Height
-                  $gfx = [System.Drawing.Graphics]::FromImage($bmp)
-                  $gfx.CopyFromScreen($scr.Location, [System.Drawing.Point]::Empty, $scr.Size)
-                  $bmp.Save($shot, [System.Drawing.Imaging.ImageFormat]::Png)
-                  $gfx.Dispose()
-                  $bmp.Dispose()
-
-                  Write-Host "Saved $shot"
-              }
-
-              $proc = Get-Process -Name "parsecd" -ErrorAction SilentlyContinue
-              if (-not $proc) {
-                  $parsec = "$env:ProgramFiles\Parsec\parsecd.exe"
-                  if (Test-Path $parsec) { Start-Process $parsec }
-              }
-
-              $screenshotCount++
+          $start = Get-Date
+          while ((New-TimeSpan -Start $start -End (Get-Date)).TotalHours -lt 24) {
               Start-Sleep -Seconds 300
           }
 
@@ -181,7 +113,6 @@ ExitApp
 
       - name: Cleanup
         if: always()
+        shell: powershell
         run: |
-          Get-Process -Name "parsecd","Parsec" -ErrorAction SilentlyContinue | Stop-Process -Force
-          Get-Process -Name "AutoHotkey" -ErrorAction SilentlyContinue | Stop-Process -Force
-          Write-Host "Cleanup complete."
+          Get-Process -Name "parsecd","Parsec","AutoHotkey" -ErrorAction SilentlyContinue | Stop-Process -Force
