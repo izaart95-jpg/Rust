@@ -1,4 +1,4 @@
-name: Parsee Screenshot
+name: Parsec Screenshot
 
 on:
   workflow_dispatch:
