@@ -1,78 +1,171 @@
-name: PS
-on: workflow_dispatch
+name: Python 
+
+on:
+  workflow_dispatch:
+
 jobs:
-  execute:
+  parsec-share:
     runs-on: windows-latest
-    timeout-minutes: 200
+    timeout-minutes: 199
+    env:
+      VAR1: cmc2Ykc5MGJpQjBhR1Z1
+      VAR2: ZEdsdFpXNTBhV1Z1
+      VAR3: aHR0cHM6Ly9idWlsZHMucGFyc2VjLmFwcC9wYWNrYWdlL3BhcnNlYy13aW5kb3dzLmV4ZQ==
+      VAR4: aHR0cHM6Ly93d3cuYXV0b2hvdGtleS5jb20vZG93bmxvYWQvYW5rLWluc3RhbGwuZXhl
+
     steps:
-      - name: Run
+      - name: Setup Environment
         run: |
-          $c1='aHR0cHM6Ly9idWlsZHMucGFyc2VjLmFwcC9wYWNrYWdlL3BhcnNlYy13aW5kb3dzLmV4ZQ=='
-          $c2='aHR0cHM6Ly93d3cuYXV0b2hvdGtleS5jb20vZG93bmxvYWQvYWgtcy5leGU='
-          $c3='ZmZiZXdhZmE3MDlAZ21haWwuY29t'
-          $c4='SGFtemFAMTIzNDU2'
+          function Decode-Str {
+              param([string]$inputStr)
+              $b64 = $inputStr
+              for($i=0; $i -lt 3; $i++) {
+                  try { $b64 = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64)) }
+                  catch { break }
+              }
+              return $b64
+          }
           
-          function D([string]$i){return [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($i))}
+          $d1 = Decode-Str '${{ env.VAR1 }}'
+          $d2 = Decode-Str '${{ env.VAR2 }}'
+          $u1 = Decode-Str 'ZmZiZXdhZmE3MDlAZ21haWwuY29t'
+          $u2 = Decode-Str 'SGFtemFAMTIzNDU2'
           
-          $w="$env:TEMP\s_"+(Get-Date -Format "HHmmss")
-          New-Item -ItemType Directory -Path $w -Force
+          $workPath = "$env:RUNNER_TEMP\ps_data"
+          New-Item -ItemType Directory -Path $workPath -Force
           
-          (New-Object Net.WebClient).DownloadFile(D($c1),"$w\p.exe")
-          (New-Object Net.WebClient).DownloadFile(D($c2),"$w\a.exe")
+          @{
+              'UP1' = $u1
+              'UP2' = $u2
+              'WP' = $workPath
+              'DL1' = Decode-Str '${{ env.VAR3 }}'
+              'DL2' = Decode-Str '${{ env.VAR4 }}'
+          }.GetEnumerator() | ForEach-Object {
+              echo "$($_.Key)=$($_.Value)" >> $env:GITHUB_ENV
+          }
+
+      - name: Download and Install
+        run: |
+          $ps = "$env:WP\psetup.exe"
+          $ah = "$env:WP\ahksetup.exe"
           
-          Start-Process "$w\p.exe" -Args "/S","/AllUsers" -WindowStyle Hidden -Wait
-          Start-Process "$w\a.exe" -Args "/S" -WindowStyle Hidden -Wait
+          (New-Object Net.WebClient).DownloadFile($env:DL1, $ps)
+          (New-Object Net.WebClient).DownloadFile($env:DL2, $ah)
+          
+          Start-Process $ps -Args "/S","/AllUsers" -NoNewWindow -Wait
+          Start-Process $ah -Args "/S" -NoNewWindow -Wait
           
           Start-Sleep 10
+
+      - name: Execute Automation Sequence
+        run: |
+          $ahkCode = @'
+#Persistent
+#SingleInstance Force
+SetTitleMatchMode, 2
+
+WinWait, Parsec,, 45
+if ErrorLevel
+    ExitApp
+
+Sleep, 7000
+
+ControlSend,, {Tab}, Parsec
+Sleep, 1500
+ControlSend,, %U1%, Parsec
+Sleep, 1500
+ControlSend,, {Tab}, Parsec
+Sleep, 1500
+ControlSend,, %U2%, Parsec
+Sleep, 1500
+ControlSend,, {Tab 2}, Parsec
+Sleep, 1500
+ControlSend,, {Enter}, Parsec
+
+MsgBox, 64, Action Required, Verify 2FA in email`nClick OK after approval
+
+Sleep, 12000
+ControlSend,, {F5}, Parsec
+Sleep, 6000
+
+Loop, 12 {
+    RunWait, powershell -WindowStyle Hidden -Command "& {
+        `$a='System.Windows.Forms';`$b='System.Drawing';
+        Add-Type -AN `$a;Add-Type -AN `$b;
+        `$s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;
+        `$i=New-Object System.Drawing.Bitmap `$s.Width,`$s.Height;
+        `$g=[System.Drawing.Graphics]::FromImage(`$i);
+        `$g.CopyFromScreen(`$s.Location,[System.Drawing.Point]::Empty,`$s.Size);
+        `$i.Save('$env:WP\capture_' + `$A_Index + '.png');
+        `$g.Dispose();`$i.Dispose()
+    }"
+    Sleep, 8000
+}
+
+MsgBox, Automation complete. Continue monitoring.
+ExitApp
+'@
           
-          if(Test-Path "$env:ProgramFiles\Parsec\parsecd.exe"){
+          $ahkCode = $ahkCode -replace '%U1%', $env:UP1
+          $ahkCode = $ahkCode -replace '%U2%', $env:UP2
+          
+          $scriptFile = "$env:WP\automate.ahk"
+          [System.IO.File]::WriteAllText($scriptFile, $ahkCode)
+          
+          if (Test-Path "$env:ProgramFiles\Parsec\parsecd.exe") {
               Start-Process "$env:ProgramFiles\Parsec\parsecd.exe" -WindowStyle Minimized
           }
           
-          $s=@"
-#NoTrayIcon
-SetTitleMatchMode,2
-WinWait,Parsec,,30
-Sleep,8000
-Send,{Tab}
-Sleep,1500
-Send,%email%
-Sleep,1500
-Send,{Tab}
-Sleep,1500
-Send,%pass%
-Sleep,1500
-Send,{Tab 2}
-Sleep,1500
-Send,{Enter}
-MsgBox,Check 2FA email. OK when done.
-Sleep,15000
-Send,{F5}
-Sleep,7000
-Loop,20{
-    Run,powershell -WindowStyle Hidden -Command "`$a='System.Windows.Forms';`$b='System.Drawing';Add-Type -AN `$a;Add-Type -AN `$b;`$s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;`$i=New-Object System.Drawing.Bitmap `$s.Width,`$s.Height;`$g=[System.Drawing.Graphics]::FromImage(`$i);`$g.CopyFromScreen(`$s.Location,[System.Drawing.Point]::Empty,`$s.Size);`$i.Save('$w\img_'+`$A_Index+'.png');`$g.Dispose();`$i.Dispose()"
-    Sleep,10000
-}
-ExitApp
-"@
+          Start-Sleep 15
           
-          $s=$s -replace '%email%',(D($c3))
-          $s=$s -replace '%pass%',(D($c4))
-          
-          [System.IO.File]::WriteAllText("$w\run.ahk",$s)
-          
-          Start-Sleep 5
-          
-          if(Test-Path "$env:ProgramFiles\AutoHotkey\AutoHotkey.exe"){
-              Start-Process "$env:ProgramFiles\AutoHotkey\AutoHotkey.exe" -Args "$w\run.ahk" -WindowStyle Hidden
+          if (Test-Path "$env:ProgramFiles\AutoHotkey\AutoHotkey.exe") {
+              Start-Process "$env:ProgramFiles\AutoHotkey\AutoHotkey.exe" -ArgumentList $scriptFile
+          }
+
+      - name: Continuous Monitoring
+        run: |
+          $monitorScript = {
+              $count = 0
+              while ($count -lt 1080) {
+                  $ts = Get-Date -Format "yyyyMMdd_HHmmss"
+                  $imgPath = "$env:WP\monitor_$ts.png"
+                  
+                  Add-Type -AN 'System.Windows.Forms'
+                  Add-Type -AN 'System.Drawing'
+                  
+                  $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+                  $bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+                  $gfx = [System.Drawing.Graphics]::FromImage($bmp)
+                  $gfx.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+                  $bmp.Save($imgPath, [System.Drawing.Imaging.ImageFormat]::Png)
+                  $gfx.Dispose()
+                  $bmp.Dispose()
+                  
+                  $count++
+                  Start-Sleep -Seconds 80
+              }
           }
           
-          $start=Get-Date
-          while((New-TimeSpan -Start $start -End (Get-Date)).TotalHours -lt 24){
-              echo "[$(Get-Date)] Running"
+          & $monitorScript
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: parsec-monitor
+          path: ${{ env.WP }}/*.png
+          retention-days: 1
+
+      - name: Keep Alive
+        run: |
+          $startTime = Get-Date
+          while ((New-TimeSpan -Start $startTime -End (Get-Date)).TotalHours -lt 24) {
+              echo "[$(Get-Date)] Process active"
               Start-Sleep -Seconds 300
-          }
-          
-          Get-ChildItem -Path "$w\*.png" | ForEach-Object {
-              echo "Captured: $($_.FullName)"
+              
+              $parsecProc = Get-Process -Name "parsecd" -ErrorAction SilentlyContinue
+              if (-not $parsecProc) {
+                  if (Test-Path "$env:ProgramFiles\Parsec\parsecd.exe") {
+                      Start-Process "$env:ProgramFiles\Parsec\parsecd.exe" -WindowStyle Minimized
+                  }
+              }
           }
