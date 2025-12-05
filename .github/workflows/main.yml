@@ -45,7 +45,6 @@ jobs:
       - name: Start Parsec UI
         run: |
           Write-Host "Starting Parsec UI..."
-          # Try to find and start Parsec
           $parsecPaths = @(
               "C:\Program Files\Parsec\parsecd.exe",
               "$env:LOCALAPPDATA\Parsec\parsecd.exe",
@@ -76,11 +75,10 @@ jobs:
           $graphics.Dispose()
           $bitmap.Dispose()
 
-      - name: Create AutoHotkey script for login
+      - name: Create and run AutoHotkey script
         run: |
-          Write-Host "Creating AutoHotkey script..."
-          # Save AHK script to file directly
-          $ahkContent = @'
+          # Create the AHK script file
+          $ahkScript = @"
 #NoEnv
 SendMode Input
 SetWorkingDir %A_ScriptDir%
@@ -89,8 +87,6 @@ SetWorkingDir %A_ScriptDir%
 WinWait, Parsec, , 30
 if ErrorLevel
 {
-    ; Take screenshot if window not found
-    Run, powershell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; `$screen = [System.Windows.Forms.Screen]::PrimaryScreen; `$bounds = `$screen.Bounds; `$bitmap = New-Object System.Drawing.Bitmap(`$bounds.Width, `$bounds.Height); `$graphics = [System.Drawing.Graphics]::FromImage(`$bitmap); `$graphics.CopyFromScreen(`$bounds.Location, [System.Drawing.Point]::Empty, `$bounds.Size); `$bitmap.Save('$env:WORK_DIR\no_window.png', [System.Drawing.Imaging.ImageFormat]::Png); `$graphics.Dispose(); `$bitmap.Dispose()"
     ExitApp
 }
 
@@ -104,7 +100,7 @@ Run, powershell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type 
 
 ; Try to click on email field
 Sleep, 2000
-Click, 500, 300  ; Adjust these coordinates based on screenshots!
+Click, 500, 300
 
 ; Type email
 Send, ffbewafa709@gmail.com
@@ -123,47 +119,43 @@ Run, powershell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type 
 
 ; Click login button
 Sleep, 1000
-Click, 500, 400  ; Adjust these coordinates based on screenshots!
+Click, 500, 400
 
 ; Wait and take final screenshot
 Sleep, 5000
 Run, powershell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; `$screen = [System.Windows.Forms.Screen]::PrimaryScreen; `$bounds = `$screen.Bounds; `$bitmap = New-Object System.Drawing.Bitmap(`$bounds.Width, `$bounds.Height); `$graphics = [System.Drawing.Graphics]::FromImage(`$bitmap); `$graphics.CopyFromScreen(`$bounds.Location, [System.Drawing.Point]::Empty, `$bounds.Size); `$bitmap.Save('$env:WORK_DIR\after_login_click.png', [System.Drawing.Imaging.ImageFormat]::Png); `$graphics.Dispose(); `$bitmap.Dispose()"
 
 Sleep, 3000
-'@
+"@
           
-          # Replace environment variable placeholder
-          $ahkContent = $ahkContent.Replace('$env:WORK_DIR', $env:WORK_DIR)
           $ahkPath = "$env:WORK_DIR\login.ahk"
-          $ahkContent | Out-File -FilePath $ahkPath -Encoding ASCII
-          Write-Host "AHK script created: $ahkPath"
+          $ahkScript | Out-File -FilePath $ahkPath -Encoding UTF8
+          Write-Host "AHK script created"
 
-      - name: Install and run AutoHotkey
+      - name: Install AutoHotkey
         run: |
           Write-Host "Downloading AutoHotkey..."
-          $ahkInstaller = "$env:WORK_DIR\AutoHotkey_Setup.exe"
+          $ahkInstaller = "$env:WORK_DIR\AutoHotkey.exe"
           Invoke-WebRequest -Uri "https://www.autohotkey.com/download/ahk-install.exe" -OutFile $ahkInstaller
           
           Write-Host "Installing AutoHotkey..."
           Start-Process -FilePath $ahkInstaller -ArgumentList "/S" -Wait -NoNewWindow
           Start-Sleep -Seconds 5
-          
+
+      - name: Run AutoHotkey script
+        run: |
           Write-Host "Running AutoHotkey script..."
           $ahkExe = "C:\Program Files\AutoHotkey\AutoHotkey.exe"
           if (Test-Path $ahkExe) {
               Start-Process -FilePath $ahkExe -ArgumentList "$env:WORK_DIR\login.ahk"
-              Start-Sleep -Seconds 15
-          } else {
-              Write-Host "AutoHotkey not found at: $ahkExe"
+              Start-Sleep -Seconds 20
           }
 
       - name: Wait for 2FA
         run: |
-          Write-Host "Waiting for 2FA code..."
-          Write-Host "Check email: ffbewafa709@gmail.com"
+          Write-Host "Waiting 90 seconds for 2FA..."
           Start-Sleep -Seconds 90
           
-          # Take screenshot after wait
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
           $screen = [System.Windows.Forms.Screen]::PrimaryScreen
@@ -175,51 +167,52 @@ Sleep, 3000
           $graphics.Dispose()
           $bitmap.Dispose()
 
-      - name: Create share button script
+      - name: Try to click Share button
         run: |
-          Write-Host "Creating share button script..."
-          $shareContent = @'
+          Write-Host "Trying to click Share button..."
+          
+          # Create simple click script
+          $clickScript = @"
 #NoEnv
 SendMode Input
 SetWorkingDir %A_ScriptDir%
 
-; Wait a moment
-Sleep, 5000
+Sleep, 3000
 
-; Take screenshot
-Run, powershell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; `$screen = [System.Windows.Forms.Screen]::PrimaryScreen; `$bounds = `$screen.Bounds; `$bitmap = New-Object System.Drawing.Bitmap(`$bounds.Width, `$bounds.Height); `$graphics = [System.Drawing.Graphics]::FromImage(`$bitmap); `$graphics.CopyFromScreen(`$bounds.Location, [System.Drawing.Point]::Empty, `$bounds.Size); `$bitmap.Save('WORKDIR_PLACEHOLDER\ahk_share_attempt.png', [System.Drawing.Imaging.ImageFormat]::Png); `$graphics.Dispose(); `$bitmap.Dispose()"
-
-; Try clicking at different positions
+; Try multiple positions
 Click, 700, 100
 Sleep, 1000
-
 Click, 700, 300
 Sleep, 1000
-
 Click, 700, 500
 Sleep, 1000
-
-; Final screenshot
-Run, powershell -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; `$screen = [System.Windows.Forms.Screen]::PrimaryScreen; `$bounds = `$screen.Bounds; `$bitmap = New-Object System.Drawing.Bitmap(`$bounds.Width, `$bounds.Height); `$graphics = [System.Drawing.Graphics]::FromImage(`$bitmap); `$graphics.CopyFromScreen(`$bounds.Location, [System.Drawing.Point]::Empty, `$bounds.Size); `$bitmap.Save('WORKDIR_PLACEHOLDER\after_share_clicks.png', [System.Drawing.Imaging.ImageFormat]::Png); `$graphics.Dispose(); `$bitmap.Dispose()"
-
-Sleep, 3000
-'@
+"@
           
-          $shareContent = $shareContent.Replace('WORKDIR_PLACEHOLDER', $env:WORK_DIR)
-          $sharePath = "$env:WORK_DIR\share.ahk"
-          $shareContent | Out-File -FilePath $sharePath -Encoding ASCII
+          $clickPath = "$env:WORK_DIR\click.ahk"
+          $clickScript | Out-File -FilePath $clickPath -Encoding UTF8
           
-          # Run share script
           $ahkExe = "C:\Program Files\AutoHotkey\AutoHotkey.exe"
           if (Test-Path $ahkExe) {
-              Start-Process -FilePath $ahkExe -ArgumentList $sharePath
+              Start-Process -FilePath $ahkExe -ArgumentList $clickPath
               Start-Sleep -Seconds 10
           }
+          
+          # Take screenshot after clicks
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+          $bounds = $screen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save("$env:WORK_DIR\after_clicks.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $graphics.Dispose()
+          $bitmap.Dispose()
 
       - name: Take final screenshots
         run: |
           Write-Host "Taking final screenshots..."
-          for ($i = 1; $i -le 3; $i++) {
+          for ($i = 1; $i -le 5; $i++) {
               Add-Type -AssemblyName System.Windows.Forms
               Add-Type -AssemblyName System.Drawing
               $screen = [System.Windows.Forms.Screen]::PrimaryScreen
@@ -230,19 +223,17 @@ Sleep, 3000
               $bitmap.Save("$env:WORK_DIR\final_$i.png", [System.Drawing.Imaging.ImageFormat]::Png)
               $graphics.Dispose()
               $bitmap.Dispose()
-              Start-Sleep -Seconds 2
+              Start-Sleep -Seconds 1
           }
 
-      - name: Upload all screenshots
-        uses: actions/upload-artifact@v4
-        with:
-          name: parsec-login-screenshots
-          path: D:\a\SEB\SEB\parsec-login\*.png
-          retention-days: 1
+      - name: Verify files
+        run: |
+          Write-Host "Files in $env:WORK_DIR:"
+          Get-ChildItem -Path $env:WORK_DIR | Format-Table -AutoSize
 
-      - name: Upload all files for debugging
+      - name: Upload screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: parsec-login-all-files
-          path: D:\a\SEB\SEB\parsec-login\
+          name: parsec-screenshots
+          path: D:\a\SEB\SEB\parsec-login\*.png
           retention-days: 1
