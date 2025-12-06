@@ -56,8 +56,8 @@ jobs:
       - name: THE CORRECT SOLUTION - Use 90 pixel offset
         run: |
           Write-Host "=== THE CORRECT SOLUTION ==="
-          Write-Host "WE FOUND THE ANSWER: Password field is 90 pixels below email field!"
-          Write-Host "At offset 90, we saw cursor | in password field (box was small)")
+          Write-Host "WE FOUND THE ANSWER: Password field is 90 pixels below email field"
+          Write-Host "At offset 90, we saw cursor in password field"
           Write-Host "Now we will:"
           Write-Host "1. Click email field"
           Write-Host "2. Type email"
@@ -81,7 +81,7 @@ jobs:
               
               # Email field is around 35% from top based on previous tests
               $emailY = [math]::Round($height * 0.35)
-              Write-Host "Clicking EMAIL field at: $centerX, $emailY")
+              Write-Host "Clicking EMAIL field at: $centerX, $emailY"
               
               & "$env:WORK_DIR\nircmd.exe" setcursor $centerX $emailY
               Start-Sleep -Milliseconds 500
@@ -90,7 +90,7 @@ jobs:
               
               # Type email
               Add-Type -AssemblyName System.Windows.Forms
-              Write-Host "Typing email: ffbewafa709@gmail.com")
+              Write-Host "Typing email: ffbewafa709@gmail.com"
               [System.Windows.Forms.SendKeys]::SendWait("^a{DELETE}")
               Start-Sleep -Milliseconds 500
               [System.Windows.Forms.SendKeys]::SendWait("ffbewafa709@gmail.com")
@@ -107,10 +107,10 @@ jobs:
               
               # STEP 2: Click password field (90 pixels BELOW email click)
               Write-Host "=== STEP 2: PASSWORD FIELD ==="
-              Write-Host "CRITICAL: Clicking 90 pixels BELOW email position")
+              Write-Host "CRITICAL: Clicking 90 pixels BELOW email position"
               
-              $passwordY = $emailY + 90  # 90 PIXELS BELOW EMAIL!
-              Write-Host "Clicking PASSWORD field at: $centerX, $passwordY")
+              $passwordY = $emailY + 90  # 90 PIXELS BELOW EMAIL
+              Write-Host "Clicking PASSWORD field at: $centerX, $passwordY"
               
               & "$env:WORK_DIR\nircmd.exe" setcursor $centerX $passwordY
               Start-Sleep -Milliseconds 500
@@ -118,7 +118,7 @@ jobs:
               Start-Sleep -Seconds 1
               
               # Type password
-              Write-Host "Typing password: Hamza@123456")
+              Write-Host "Typing password: Hamza@123456"
               [System.Windows.Forms.SendKeys]::SendWait("^a{DELETE}")
               Start-Sleep -Milliseconds 500
               [System.Windows.Forms.SendKeys]::SendWait("Hamza@123456")
@@ -132,21 +132,21 @@ jobs:
               $graphics.Dispose()
               $bitmap.Dispose()
               
-              # STEP 3: Click login button (another 50-60 pixels below password)
+              # STEP 3: Click login button (another 60 pixels below password)
               Write-Host "=== STEP 3: LOGIN BUTTON ==="
               
               $loginY = $passwordY + 60  # 60 pixels below password field
-              Write-Host "Clicking LOGIN button at: $centerX, $loginY")
+              Write-Host "Clicking LOGIN button at: $centerX, $loginY"
               
               & "$env:WORK_DIR\nircmd.exe" setcursor $centerX $loginY
               Start-Sleep -Milliseconds 500
               & "$env:WORK_DIR\nircmd.exe" sendmouse left click
               Start-Sleep -Seconds 3
               
-              Write-Host "Login sequence completed!")
+              Write-Host "Login sequence completed"
               
               # Also try pressing Enter as backup
-              Write-Host "Also trying Enter key as backup...")
+              Write-Host "Also trying Enter key as backup"
               [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
               Start-Sleep -Seconds 2
           }
@@ -169,7 +169,7 @@ jobs:
               $offsets = @(85, 90, 95, 100)
               
               foreach ($offset in $offsets) {
-                  Write-Host "--- Testing offset $offset ---")
+                  Write-Host "--- Testing offset $offset ---"
                   
                   # Click email
                   $emailY = [math]::Round($height * 0.35)
@@ -204,81 +204,9 @@ jobs:
                   $graphics.Dispose()
                   $bitmap.Dispose()
                   
-                  Write-Host "Offset $offset test completed")
+                  Write-Host "Offset $offset test completed"
                   Start-Sleep -Seconds 2
               }
-          }
-
-      - name: Alternative Tab method with our knowledge
-        run: |
-          Write-Host "=== ALTERNATIVE: TAB METHOD ==="
-          Start-Sleep -Seconds 5
-          
-          if (Test-Path "$env:WORK_DIR\nircmd.exe") {
-              Add-Type -AssemblyName System.Windows.Forms
-              
-              $screen = [System.Windows.Forms.Screen]::PrimaryScreen
-              $width = $screen.Bounds.Width
-              $height = $screen.Bounds.Height
-              $centerX = [math]::Round($width / 2)
-              
-              # Focus window
-              $focusY = [math]::Round($height * 0.35)
-              & "$env:WORK_DIR\nircmd.exe" setcursor $centerX $focusY
-              Start-Sleep -Milliseconds 500
-              & "$env:WORK_DIR\nircmd.exe" sendmouse left click
-              Start-Sleep -Seconds 1
-              
-              # Method A: Click email, then Tab to password
-              Write-Host "Method A: Click email, Tab to password")
-              
-              # Click email field
-              & "$env:WORK_DIR\nircmd.exe" setcursor $centerX $focusY
-              Start-Sleep -Milliseconds 500
-              & "$env:WORK_DIR\nircmd.exe" sendmouse left dblclick
-              Start-Sleep -Seconds 1
-              
-              # Type email
-              [System.Windows.Forms.SendKeys]::SendWait("ffbewafa709@gmail.com")
-              Start-Sleep -Seconds 1
-              
-              # Press Tab ONCE to go to password field
-              Write-Host "Pressing Tab to go to password field...")
-              [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
-              Start-Sleep -Seconds 1
-              
-              # Type password
-              [System.Windows.Forms.SendKeys]::SendWait("Hamza@123456")
-              Start-Sleep -Seconds 1
-              
-              # Press Tab then Enter for login
-              [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
-              Start-Sleep -Milliseconds 500
-              [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-              Start-Sleep -Seconds 2
-              
-              # Method B: Try multiple Tabs from start
-              Write-Host "Method B: Try multiple Tabs from start")
-              Start-Sleep -Seconds 3
-              
-              # Press Tab 3 times to cycle through fields
-              [System.Windows.Forms.SendKeys]::SendWait("{TAB}{TAB}{TAB}")
-              Start-Sleep -Seconds 1
-              
-              # Should be in email field - type email
-              [System.Windows.Forms.SendKeys]::SendWait("^a{DELETE}ffbewafa709@gmail.com")
-              Start-Sleep -Seconds 1
-              
-              # Tab to password
-              [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
-              Start-Sleep -Seconds 1
-              [System.Windows.Forms.SendKeys]::SendWait("Hamza@123456")
-              Start-Sleep -Seconds 1
-              
-              # Tab to login and press Enter
-              [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
-              Start-Sleep -Milliseconds 500
-              [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
           }
 
       - name: Take final verification
@@ -316,13 +244,13 @@ jobs:
               # Look for signs of successful login
               $hasMainWindow = $parsecProcess | Where-Object { $_.MainWindowTitle -notlike "*Sign*" -and $_.MainWindowTitle -ne "" }
               if ($hasMainWindow) {
-                  Write-Host "✓ SUCCESS: Parsec appears to be logged in!"
-                  Write-Host "Window title: $($hasMainWindow.MainWindowTitle)")
+                  Write-Host "✓ SUCCESS: Parsec appears to be logged in"
+                  Write-Host "Window title: $($hasMainWindow.MainWindowTitle)"
               } else {
-                  Write-Host "? Parsec running but may still be on login screen")
+                  Write-Host "? Parsec running but may still be on login screen"
               }
           } else {
-              Write-Host "✗ Parsec is NOT running")
+              Write-Host "✗ Parsec is NOT running"
           }
 
       - name: Upload results
