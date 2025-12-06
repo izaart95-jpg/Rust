@@ -70,7 +70,7 @@ jobs:
           
           Write-Host "Screen resolution: $($bounds.Width)x$($bounds.Height)"
 
-      - name: SIMPLE LOGIN - Method 1: Click top then bottom
+      - name: Method 1 Click top then bottom
         run: |
           Write-Host "=== METHOD 1: SIMPLE CLICK APPROACH ==="
           
@@ -151,7 +151,7 @@ jobs:
               Write-Host "Method 1 completed"
           }
 
-      - name: METHOD 2: Use Tab navigation only
+      - name: Method 2 Tab navigation only
         run: |
           Write-Host "=== METHOD 2: TAB NAVIGATION ONLY ==="
           Start-Sleep -Seconds 3
@@ -220,7 +220,7 @@ jobs:
               Write-Host "Method 2 completed"
           }
 
-      - name: METHOD 3: Manual field discovery
+      - name: Method 3 Manual field discovery
         run: |
           Write-Host "=== METHOD 3: MANUAL FIELD DISCOVERY ==="
           Start-Sleep -Seconds 3
@@ -236,12 +236,12 @@ jobs:
               
               Write-Host "Testing which field is which..."
               
-              # Test 1: Click near top and type "EMAILTEST"
+              # Test 1: Click near top and type EMAILTEST
               $testY1 = [math]::Round($height * 0.35)
               Write-Host "Test 1: Clicking at $centerX, $testY1"
               & "$env:WORK_DIR\nircmd.exe" setcursor $centerX $testY1
               Start-Sleep -Milliseconds 500
-              & "$env:WORKORD\nircmd.exe" sendmouse left dblclick
+              & "$env:WORK_DIR\nircmd.exe" sendmouse left dblclick
               Start-Sleep -Seconds 1
               
               [System.Windows.Forms.SendKeys]::SendWait("^a{DELETE}EMAILTEST")
@@ -255,7 +255,7 @@ jobs:
               $graphics.Dispose()
               $bitmap.Dispose()
               
-              # Test 2: Click lower and type "PASSTEST"
+              # Test 2: Click lower and type PASSTEST
               $testY2 = [math]::Round($height * 0.45)
               Write-Host "Test 2: Clicking at $centerX, $testY2"
               & "$env:WORK_DIR\nircmd.exe" setcursor $centerX $testY2
@@ -276,8 +276,8 @@ jobs:
               
               # Now based on screenshots, we can see which is email vs password
               Write-Host "Check screenshots to see which field is which"
-              Write-Host "test1_emailtest.png - Should show 'EMAILTEST' in plain text (email field)"
-              Write-Host "test2_passtest.png - Should show '********' (password field)")
+              Write-Host "test1_emailtest.png - Should show EMAILTEST in plain text (email field)"
+              Write-Host "test2_passtest.png - Should show asterisks (password field)"
               
               # Clear everything for final attempt
               Write-Host "Clearing for final attempt..."
@@ -299,7 +299,7 @@ jobs:
               Start-Sleep -Seconds 1
           }
 
-      - name: FINAL ATTEMPT based on discovery
+      - name: Final attempt based on discovery
         run: |
           Write-Host "=== FINAL ATTEMPT ==="
           Start-Sleep -Seconds 3
