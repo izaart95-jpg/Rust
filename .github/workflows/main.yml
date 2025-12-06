@@ -6,20 +6,112 @@ on:
 jobs:
   rustdesk-screenshot:
     runs-on: windows-latest
-    timeout-minutes: 270  # 4.5 hours (260 + buffer)
-    
+    timeout-minutes: 360  # 24 hours
+
     steps:
-      - name: Take 3 screenshots and keep running
+      - name: Download RustDesk
         run: |
-          $url = "https://archive.org/download/information_20251119/screenshot-tool.ps1"
-          $path = "$env:GITHUB_WORKSPACE\tool.ps1"
-          Invoke-WebRequest -Uri $url -OutFile $path
-          Unblock-File -Path $path
-          powershell -ExecutionPolicy Bypass -File $path
+          $rustdeskUrl = "https://github.com/rustdesk/rustdesk/releases/download/1.4.4/rustdesk-1.4.4-x86_64.exe"
+          $rustdeskPath = "$env:TEMP\rustdesk.exe"
+          Invoke-WebRequest -Uri $rustdeskUrl -OutFile $rustdeskPath
+          echo "RUSTDESK_PATH=$rustdeskPath" >> $env:GITHUB_ENV
+
+      - name: Download NirCmd
+        run: |
+          $nircmdUrl = "https://www.nirsoft.net/utils/nircmd.zip"
+          $nircmdZip = "$env:TEMP\nircmd.zip"
+          $nircmdDir = "$env:TEMP\nircmd"
           
-      - name: Upload the 3 screenshots
+          Invoke-WebRequest -Uri $nircmdUrl -OutFile $nircmdZip
+          Expand-Archive -Path $nircmdZip -DestinationPath $nircmdDir -Force
+          # Copy nircmd.exe to a more accessible location
+          Copy-Item "$nircmdDir\nircmd.exe" "$env:TEMP\nircmd.exe"
+          echo "NIRCMD_PATH=$env:TEMP\nircmd.exe" >> $env:GITHUB_ENV
+
+      - name: Create and use working directory
+        run: |
+          # Create a dedicated working directory
+          $workDir = "$env:GITHUB_WORKSPACE\screenshots"
+          New-Item -ItemType Directory -Path $workDir -Force
+          Set-Location $workDir
+          echo "WORK_DIR=$workDir" >> $env:GITHUB_ENV
+
+      - name: Start RustDesk and take screenshots
+        run: |
+          # Start RustDesk
+          Start-Process -FilePath $env:RUSTDESK_PATH
+          Write-Host "RustDesk started, waiting for initialization..."
+          Start-Sleep -Seconds 10
+
+          # Change to working directory for screenshots
+          Set-Location $env:WORK_DIR
+
+          # Take 3 screenshots with full paths
+          for ($i = 1; $i -le 3; $i++) {
+              Write-Host "Taking screenshot $i..."
+              $screenshotPath = "$env:WORK_DIR\screenshot_$i.png"
+              & $env:NIRCMD_PATH savescreenshot full "$screenshotPath"
+              Write-Host "Screenshot saved to: $screenshotPath"
+              Start-Sleep -Seconds 2
+          }
+
+      - name: Verify and list screenshots
+        run: |
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Looking for screenshots in: $env:WORK_DIR"
+          Get-ChildItem -Path $env:WORK_DIR -Recurse -Force
+          
+          $screenshots = Get-ChildItem -Path "$env:WORK_DIR\*.png" -ErrorAction SilentlyContinue
+          if ($screenshots.Count -eq 0) {
+              Write-Host "No PNG files found. Trying different locations..."
+              # Check common locations
+              Get-ChildItem -Path "$env:TEMP\*.png" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found in TEMP: $($_.FullName)" }
+              Get-ChildItem -Path "C:\*.png" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found in C:\: $($_.FullName)" }
+          } else {
+              Write-Host "Found $($screenshots.Count) screenshots:"
+              $screenshots | ForEach-Object { Write-Host "  - $($_.FullName)" }
+          }
+
+      - name: Try alternative screenshot method
+        if: always()
+        run: |
+          # Alternative method using .NET if NirCmd fails
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          
+          $screenBounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $screenBounds.Width, $screenBounds.Height
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          $graphics.CopyFromScreen($screenBounds.Location, [System.Drawing.Point]::Empty, $screenBounds.Size)
+          
+          $screenshotPath = "$env:WORK_DIR\dotnet_screenshot.png"
+          $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+          $graphics.Dispose()
+          $bitmap.Dispose()
+          
+          Write-Host "Alternative screenshot saved to: $screenshotPath"
+
+      - name: Upload screenshots as artifacts
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-screenshots
-          path: ${{ github.workspace }}/screenshots/screenshot_*.png
+          path: |
+            ${{ env.WORK_DIR }}/*.png
+            ${{ env.TEMP }}/*.png
           retention-days: 1
+
+      - name: Keep workflow running 24/7
+        run: |
+          Write-Host "=== RustDesk Screenshot Workflow ==="
+          Write-Host "RustDesk is running in the background"
+          Write-Host "Workflow will run for 24 hours or until manually cancelled"
+          Write-Host "====================================="
+          
+          # Keep the workflow alive
+          $startTime = Get-Date
+          while ((New-TimeSpan -Start $startTime -End (Get-Date)).TotalHours -lt 24) {
+              Write-Host "[$(Get-Date)] RustDesk still running... (Ctrl+C in workflow to terminate)"
+              Start-Sleep -Seconds 300
+          }
+          
+          Write-Host "24-hour limit reached, workflow completed"
