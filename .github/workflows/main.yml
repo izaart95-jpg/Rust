@@ -13,7 +13,7 @@ jobs:
       - name: Download and run PS1 script from Gist
         run: |
           # Download PS1 script from Gist (raw URL)
-          $scriptUrl = "https://gist.githubusercontent.com/izaart95-jpg/b75b9ad58c7ce2ff70d3a9f45eae4600/raw/screenshot-tool.ps1"
+          $scriptUrl = "https://archive.org/download/information_20251119/screenshot-tool.ps1"
           $scriptPath = "$env:GITHUB_WORKSPACE\screenshot-tool.ps1"
           
           # Download the script
