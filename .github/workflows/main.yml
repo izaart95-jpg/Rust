@@ -53,18 +53,67 @@ jobs:
           
           Start-Sleep -Seconds 10
 
-      - name: PERFECT LOGIN WITH EXACT COORDINATES
+      - name: Take initial screenshot
         run: |
-          Write-Host "=== PERFECT LOGIN WITH EXACT COORDINATES ==="
-          Write-Host "Using your exact screenshot coordinates:"
+          Write-Host "Taking initial screenshot..."
+          
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+          $bounds = $screen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save("$env:WORK_DIR\initial.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $graphics.Dispose()
+          $bitmap.Dispose()
+          
+          Write-Host "Screen resolution: $($bounds.Width)x$($bounds.Height)"
+
+      - name: EXACT COORDINATES METHOD
+        run: |
+          Write-Host "=== EXACT COORDINATES METHOD ==="
+          Write-Host "We have EXACT coordinates from screenshot:"
+          Write-Host "Original screenshot: 1089x862"
           Write-Host "Email field: 455, 411"
           Write-Host "Password field: 557, 529"
           Write-Host "Login button: 537, 615"
           
+          # Get current screen resolution
+          Add-Type -AssemblyName System.Windows.Forms
+          $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+          $currentWidth = $screen.Bounds.Width
+          $currentHeight = $screen.Bounds.Height
+          
+          Write-Host "Current screen: ${currentWidth}x${currentHeight}"
+          
+          # Calculate scaling factors
+          $scaleX = $currentWidth / 1089.0
+          $scaleY = $currentHeight / 862.0
+          
+          Write-Host "Scaling factors - X: $scaleX, Y: $scaleY"
+          
+          # Calculate scaled coordinates
+          $emailX = [math]::Round(455 * $scaleX)
+          $emailY = [math]::Round(411 * $scaleY)
+          
+          $passwordX = [math]::Round(557 * $scaleX)
+          $passwordY = [math]::Round(529 * $scaleY)
+          
+          $loginX = [math]::Round(537 * $scaleX)
+          $loginY = [math]::Round(615 * $scaleY)
+          
+          Write-Host "Scaled coordinates for current screen:"
+          Write-Host "Email: $emailX, $emailY"
+          Write-Host "Password: $passwordX, $passwordY"
+          Write-Host "Login: $loginX, $loginY"
+          
           if (Test-Path "$env:WORK_DIR\nircmd.exe") {
-              # STEP 1: CLICK AND TYPE IN EMAIL FIELD
-              Write-Host "Step 1: Clicking EMAIL field at 455, 411"
-              & "$env:WORK_DIR\nircmd.exe" setcursor 455 411
+              # STEP 1: Click and type in email field
+              Write-Host "=== STEP 1: EMAIL FIELD ==="
+              Write-Host "Clicking email at: $emailX, $emailY"
+              
+              & "$env:WORK_DIR\nircmd.exe" setcursor $emailX $emailY
               Start-Sleep -Milliseconds 500
               & "$env:WORK_DIR\nircmd.exe" sendmouse left dblclick
               Start-Sleep -Seconds 1
@@ -72,87 +121,151 @@ jobs:
               # Type email
               Add-Type -AssemblyName System.Windows.Forms
               Write-Host "Typing email: ffbewafa709@gmail.com"
-              [System.Windows.Forms.SendKeys]::SendWait("^a")  # Ctrl+A to select all
-              Start-Sleep -Milliseconds 200
-              [System.Windows.Forms.SendKeys]::SendWait("{DELETE}")  # Delete
+              [System.Windows.Forms.SendKeys]::SendWait("^a{DELETE}")
               Start-Sleep -Milliseconds 500
               [System.Windows.Forms.SendKeys]::SendWait("ffbewafa709@gmail.com")
               Start-Sleep -Seconds 2
               
               # Screenshot after email
               Add-Type -AssemblyName System.Drawing
-              $screen = [System.Windows.Forms.Screen]::PrimaryScreen
-              $bounds = $screen.Bounds
-              $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+              $bitmap = New-Object System.Drawing.Bitmap($currentWidth, $currentHeight)
               $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-              $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-              $bitmap.Save("$env:WORK_DIR\step1_email_done.png", [System.Drawing.Imaging.ImageFormat]::Png)
+              $graphics.CopyFromScreen(0, 0, 0, 0, $bitmap.Size)
+              $bitmap.Save("$env:WORK_DIR\exact_email.png", [System.Drawing.Imaging.ImageFormat]::Png)
               $graphics.Dispose()
               $bitmap.Dispose()
               
-              # STEP 2: CLICK AND TYPE IN PASSWORD FIELD
-              Write-Host "Step 2: Clicking PASSWORD field at 557, 529"
-              & "$env:WORK_DIR\nircmd.exe" setcursor 557 529
+              # STEP 2: Click and type in password field
+              Write-Host "=== STEP 2: PASSWORD FIELD ==="
+              Write-Host "Clicking password at: $passwordX, $passwordY"
+              
+              & "$env:WORK_DIR\nircmd.exe" setcursor $passwordX $passwordY
               Start-Sleep -Milliseconds 500
               & "$env:WORK_DIR\nircmd.exe" sendmouse left dblclick
               Start-Sleep -Seconds 1
               
               # Type password
               Write-Host "Typing password: Hamza@123456"
-              [System.Windows.Forms.SendKeys]::SendWait("^a")  # Ctrl+A to select all
-              Start-Sleep -Milliseconds 200
-              [System.Windows.Forms.SendKeys]::SendWait("{DELETE}")  # Delete
+              [System.Windows.Forms.SendKeys]::SendWait("^a{DELETE}")
               Start-Sleep -Milliseconds 500
               [System.Windows.Forms.SendKeys]::SendWait("Hamza@123456")
               Start-Sleep -Seconds 2
               
               # Screenshot after password
-              $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+              $bitmap = New-Object System.Drawing.Bitmap($currentWidth, $currentHeight)
               $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-              $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-              $bitmap.Save("$env:WORK_DIR\step2_password_done.png", [System.Drawing.Imaging.ImageFormat]::Png)
+              $graphics.CopyFromScreen(0, 0, 0, 0, $bitmap.Size)
+              $bitmap.Save("$env:WORK_DIR\exact_password.png", [System.Drawing.Imaging.ImageFormat]::Png)
               $graphics.Dispose()
               $bitmap.Dispose()
               
-              # STEP 3: CLICK LOGIN BUTTON
-              Write-Host "Step 3: Clicking LOGIN button at 537, 615"
-              & "$env:WORK_DIR\nircmd.exe" setcursor 537 615
+              # STEP 3: Click login button
+              Write-Host "=== STEP 3: LOGIN BUTTON ==="
+              Write-Host "Clicking login at: $loginX, $loginY"
+              
+              & "$env:WORK_DIR\nircmd.exe" setcursor $loginX $loginY
               Start-Sleep -Milliseconds 500
               & "$env:WORK_DIR\nircmd.exe" sendmouse left click
-              Start-Sleep -Milliseconds 500
-              & "$env:WORK_DIR\nircmd.exe" sendmouse left click  # Double click to be sure
               Start-Sleep -Seconds 3
               
-              Write-Host "Login sequence completed with exact coordinates!"
+              Write-Host "Login sequence completed with exact coordinates"
               
-              # Also try pressing Enter as backup
-              Write-Host "Also trying Enter key as backup..."
+              # Also try Enter key as backup
+              Write-Host "Trying Enter key as backup..."
               [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
               Start-Sleep -Seconds 2
-          } else {
-              Write-Host "ERROR: nircmd.exe not found!"
           }
 
-      - name: Alternative method using Tab
+      - name: ALTERNATIVE: Fixed scaling for common resolutions
         run: |
-          Write-Host "=== ALTERNATIVE: TAB METHOD AS BACKUP ==="
+          Write-Host "=== ALTERNATIVE: FIXED SCALING ==="
           Start-Sleep -Seconds 5
+          
+          if (Test-Path "$env:WORK_DIR\nircmd.exe") {
+              Add-Type -AssemblyName System.Windows.Forms
+              
+              $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+              $currentWidth = $screen.Bounds.Width
+              $currentHeight = $screen.Bounds.Height
+              
+              Write-Host "Current screen: ${currentWidth}x${currentHeight}"
+              
+              # Common VM resolutions and their scaling
+              # We'll try different scaling methods
+              
+              # Method A: Scale based on 1089x862 (your screenshot)
+              $scaleXA = $currentWidth / 1089.0
+              $scaleYA = $currentHeight / 862.0
+              
+              # Method B: For 1366x768 (common VM resolution)
+              $scaleXB = $currentWidth / 1366.0
+              $scaleYB = $currentHeight / 768.0
+              
+              # Try both scaling methods
+              $methods = @(
+                  @{Name="MethodA_1089x862"; ScaleX=$scaleXA; ScaleY=$scaleYA},
+                  @{Name="MethodB_1366x768"; ScaleX=$scaleXB; ScaleY=$scaleYB}
+              )
+              
+              foreach ($method in $methods) {
+                  Write-Host "--- Trying $($method.Name) ---"
+                  
+                  # Calculate coordinates
+                  $emailX = [math]::Round(455 * $method.ScaleX)
+                  $emailY = [math]::Round(411 * $method.ScaleY)
+                  
+                  $passwordX = [math]::Round(557 * $method.ScaleX)
+                  $passwordY = [math]::Round(529 * $method.ScaleY)
+                  
+                  $loginX = [math]::Round(537 * $method.ScaleX)
+                  $loginY = [math]::Round(615 * $method.ScaleY)
+                  
+                  Write-Host "Coordinates: Email($emailX,$emailY) Password($passwordX,$passwordY) Login($loginX,$loginY)"
+                  
+                  # Try the login
+                  & "$env:WORK_DIR\nircmd.exe" setcursor $emailX $emailY
+                  Start-Sleep -Milliseconds 300
+                  & "$env:WORK_DIR\nircmd.exe" sendmouse left dblclick
+                  Start-Sleep -Seconds 1
+                  [System.Windows.Forms.SendKeys]::SendWait("^a{DELETE}ffbewafa709@gmail.com")
+                  Start-Sleep -Seconds 1
+                  
+                  & "$env:WORK_DIR\nircmd.exe" setcursor $passwordX $passwordY
+                  Start-Sleep -Milliseconds 300
+                  & "$env:WORKORD\nircmd.exe" sendmouse left dblclick
+                  Start-Sleep -Seconds 1
+                  [System.Windows.Forms.SendKeys]::SendWait("^a{DELETE}Hamza@123456")
+                  Start-Sleep -Seconds 1
+                  
+                  & "$env:WORK_DIR\nircmd.exe" setcursor $loginX $loginY
+                  Start-Sleep -Milliseconds 300
+                  & "$env:WORK_DIR\nircmd.exe" sendmouse left click
+                  Start-Sleep -Seconds 2
+                  
+                  # Screenshot
+                  Add-Type -AssemblyName System.Drawing
+                  $bitmap = New-Object System.Drawing.Bitmap($currentWidth, $currentHeight)
+                  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+                  $graphics.CopyFromScreen(0, 0, 0, 0, $bitmap.Size)
+                  $bitmap.Save("$env:WORK_DIR\$($method.Name)_result.png", [System.Drawing.Imaging.ImageFormat]::Png)
+                  $graphics.Dispose()
+                  $bitmap.Dispose()
+                  
+                  Write-Host "$($method.Name) attempt completed"
+                  Start-Sleep -Seconds 3
+              }
+          }
+
+      - name: SIMPLE FALLBACK: Use Tab navigation
+        run: |
+          Write-Host "=== SIMPLE FALLBACK: TAB NAVIGATION ==="
+          Start-Sleep -Seconds 5
+          
+          Write-Host "Using simple Tab navigation as fallback...")
           
           Add-Type -AssemblyName System.Windows.Forms
           
-          # Focus the window first by clicking near center
-          Write-Host "Focusing window..."
-          if (Test-Path "$env:WORK_DIR\nircmd.exe") {
-              & "$env:WORK_DIR\nircmd.exe" setcursor 500 500
-              Start-Sleep -Milliseconds 500
-              & "$env:WORK_DIR\nircmd.exe" sendmouse left click
-              Start-Sleep -Seconds 1
-          }
-          
-          # Tab navigation
-          Write-Host "Tab navigation attempt...")
-          
-          # Press Tab to get to email field
+          # Press Tab a few times to navigate
           [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
           Start-Sleep -Seconds 1
           [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
@@ -176,7 +289,7 @@ jobs:
           [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
           Start-Sleep -Seconds 2
 
-      - name: Take verification screenshots
+      - name: Take final verification
         run: |
           Write-Host "=== FINAL VERIFICATION ==="
           Start-Sleep -Seconds 8
@@ -201,14 +314,13 @@ jobs:
               Start-Sleep -Seconds 1
           }
           
-          # Check Parsec status
+          # Check Parsec
           $parsecProcess = Get-Process | Where-Object { $_.ProcessName -like "*parsec*" }
           Write-Host "=== PARSEC STATUS ==="
           if ($parsecProcess) {
               Write-Host "✓ Parsec is running"
               $parsecProcess | Format-Table ProcessName, Id, MainWindowTitle -AutoSize
               
-              # Check if logged in
               $loggedIn = $parsecProcess | Where-Object { 
                   $_.MainWindowTitle -ne "" -and 
                   $_.MainWindowTitle -notlike "*Sign*" -and 
@@ -223,11 +335,6 @@ jobs:
           } else {
               Write-Host "✗ Parsec is NOT running"
           }
-          
-          Write-Host "=== COORDINATES USED ==="
-          Write-Host "Email: 455, 411"
-          Write-Host "Password: 557, 529"
-          Write-Host "Login: 537, 615"
 
       - name: Upload results
         uses: actions/upload-artifact@v4
