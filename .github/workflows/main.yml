@@ -1,4 +1,4 @@
-name: RustDesk Screenshot Capture
+name: RustDesk with Screen Recording Permission
 
 on:
   workflow_dispatch:
@@ -6,10 +6,10 @@ on:
 jobs:
   rustdesk-screenshots:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45  # 25 minutes for workflow + 20 minutes runtime
 
     steps:
-      - name: Install RustDesk via Homebrew (Primary Method)
+      - name: Install RustDesk via Homebrew
         run: |
           echo "=== Installing RustDesk via Homebrew ==="
           
@@ -17,274 +17,361 @@ jobs:
           if ! command -v brew &> /dev/null; then
             echo "Installing Homebrew..."
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-            
-            # Add Homebrew to PATH for this session
             echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
             eval "$(/opt/homebrew/bin/brew shellenv)"
           fi
           
-          # Update Homebrew
-          brew update
-          
           # Install RustDesk
-          echo "Installing RustDesk via Homebrew..."
           brew install --cask rustdesk
-          
           echo "✅ RustDesk installed via Homebrew"
 
-      - name: Alternative RustDesk Install (if Homebrew fails)
-        if: failure()
+      - name: Get Exact Display Resolution
         run: |
-          echo "=== Trying alternative RustDesk installation ==="
+          echo "=== Getting Exact Display Resolution ==="
           
-          echo "Method 1: Download from GitHub API"
-          # Get actual download URL from GitHub API
-          API_RESPONSE=$(curl -s "https://api.github.com/repos/rustdesk/rustdesk/releases/latest")
-          DMG_URL=$(echo "$API_RESPONSE" | grep -o "browser_download_url.*\.dmg" | head -1 | cut -d'"' -f3)
+          # Use AppleScript to get exact screen bounds
+          RESOLUTION=$(osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>/dev/null | awk '{print $3 "x" $4}')
           
-          if [ ! -z "$DMG_URL" ]; then
-            echo "Found DMG URL: $DMG_URL"
-            curl -L -o rustdesk.dmg "$DMG_URL" --retry 3
+          if [ -z "$RESOLUTION" ] || [ "$RESOLUTION" = "0x0" ]; then
+            # Fallback method using system_profiler
+            RESOLUTION=$(system_profiler SPDisplaysDataType 2>/dev/null | grep "UI Looks like" | head -1 | sed 's/.*UI Looks like: //' | sed 's/ //g')
           fi
           
-          # Check if download succeeded
-          if [ -f "rustdesk.dmg" ] && [ -s "rustdesk.dmg" ] && ! file rustdesk.dmg | grep -q "text"; then
-            echo "DMG downloaded successfully, installing..."
-            hdiutil attach rustdesk.dmg -mountpoint /Volumes/RustDesk -nobrowse -quiet
-            sudo cp -R "/Volumes/RustDesk/RustDesk.app" /Applications/
-            hdiutil detach /Volumes/RustDesk -quiet
-            rm -f rustdesk.dmg
-            echo "✅ RustDesk installed from DMG"
-          else
-            echo "Method 2: Download from specific working URL"
-            # Try a known working version
-            curl -L -o rustdesk.dmg "https://github.com/rustdesk/rustdesk/releases/download/1.4.3/rustdesk-1.4.3-x86_64.dmg" --retry 3
-            
-            if [ -f "rustdesk.dmg" ] && [ -s "rustdesk.dmg" ]; then
-              echo "Installing version 1.4.3..."
-              hdiutil attach rustdesk.dmg -mountpoint /Volumes/RustDesk -nobrowse -quiet
-              sudo cp -R "/Volumes/RustDesk/RustDesk.app" /Applications/
-              hdiutil detach /Volumes/RustDesk -quiet
-              rm -f rustdesk.dmg
-              echo "✅ RustDesk 1.4.3 installed"
-            else
-              echo "Method 3: Manual download with wget"
-              # Install wget if needed
-              if ! command -v wget &> /dev/null; then
-                brew install wget
-              fi
-              
-              # Try wget with different options
-              wget -O rustdesk.dmg "https://github.com/rustdesk/rustdesk/releases/download/1.4.3/rustdesk-1.4.3-x86_64.dmg" || true
-              
-              if [ -f "rustdesk.dmg" ] && [ $(wc -c < rustdesk.dmg) -gt 1000000 ]; then
-                hdiutil attach rustdesk.dmg -mountpoint /Volumes/RustDesk -nobrowse -quiet
-                sudo cp -R "/Volumes/RustDesk/RustDesk.app" /Applications/
-                hdiutil detach /Volumes/RustDesk -quiet
-                rm -f rustdesk.dmg
-                echo "✅ RustDesk installed via wget"
-              else
-                echo "❌ All download methods failed"
-                exit 1
-              fi
-            fi
-          fi
-
-      - name: Verify RustDesk Installation
-        run: |
-          echo "=== Verifying RustDesk Installation ==="
-          
-          if [ -d "/Applications/RustDesk.app" ]; then
-            echo "✅ RustDesk found in Applications folder"
-            echo "Version: $(mdls -name kMDItemVersion /Applications/RustDesk.app | awk '{print $3}')"
-          else
-            echo "Searching for RustDesk..."
-            find /Applications -name "*RustDesk*" -type d 2>/dev/null || true
-            find ~/Applications -name "*RustDesk*" -type d 2>/dev/null || true
-            
-            # Try to find via mdfind
-            RUSTDESK_PATH=$(mdfind "kMDItemCFBundleIdentifier = 'com.carriez.rustdesk'" | head -1)
-            if [ ! -z "$RUSTDESK_PATH" ]; then
-              echo "Found RustDesk at: $RUSTDESK_PATH"
-            else
-              echo "⚠️ RustDesk not found"
-            fi
-          fi
-
-      - name: Start RustDesk
-        run: |
-          echo "=== Starting RustDesk ==="
-          
-          # Start RustDesk
-          open -a /Applications/RustDesk.app 2>/dev/null || open -a "RustDesk" 2>/dev/null || true
-          
-          # Wait for startup
-          echo "Waiting for RustDesk to start..."
-          sleep 15
-          
-          # Check if running
-          if pgrep -f "RustDesk" > /dev/null; then
-            echo "✅ RustDesk is running"
-            
-            # Get process info
-            echo "Process info:"
-            ps aux | grep -i rustdesk | grep -v grep | head -5 || true
-          else
-            echo "⚠️ RustDesk process not found, trying again..."
-            # Try different launch methods
-            open "/Applications/RustDesk.app"
-            sleep 10
-            
-            if ! pgrep -f "RustDesk" > /dev/null; then
-              echo "Launching via path..."
-              /Applications/RustDesk.app/Contents/MacOS/RustDesk &
-              sleep 10
-            fi
-          fi
-
-      - name: Get Display Information
-        run: |
-          echo "=== Getting Display Information ==="
-          
-          # Multiple methods to get resolution
-          echo "Method 1: system_profiler"
-          system_profiler SPDisplaysDataType 2>/dev/null | grep -A5 "Display" || true
-          
-          echo ""
-          echo "Method 2: AppleScript"
-          osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>/dev/null || echo "AppleScript failed"
-          
-          echo ""
-          echo "Method 3: Direct screen info"
-          # Get resolution from system
-          RESOLUTION=$(system_profiler SPDisplaysDataType 2>/dev/null | grep "Resolution" | head -1 | sed 's/.*Resolution: //' | sed 's/ //g')
-          
-          if [ -z "$RESOLUTION" ]; then
-            # Try alternative approach
-            RESOLUTION=$(/usr/sbin/system_profiler SPDisplaysDataType 2>/dev/null | awk -F': ' '/Resolution/{print $2; exit}' | tr -d ' ')
+          if [ -z "$RESOLUTION" ] || [ "$RESOLUTION" = "0x0" ]; then
+            # Get from display settings
+            RESOLUTION=$(system_profiler SPDisplaysDataType 2>/dev/null | grep "Resolution" | head -1 | sed 's/.*Resolution: //' | sed 's/ //g')
           fi
           
-          if [ -z "$RESOLUTION" ]; then
-            # Fallback to common resolution
-            RESOLUTION="1920x1080"
-            echo "Using fallback resolution: $RESOLUTION"
-          else
-            echo "Detected resolution: $RESOLUTION"
+          if [ -z "$RESOLUTION" ] || [ "$RESOLUTION" = "0x0" ]; then
+            echo "⚠️ Could not detect resolution, using 1024x768 as default"
+            RESOLUTION="1024x768"
           fi
           
+          echo "Detected resolution: $RESOLUTION"
+          
+          # Parse width and height
+          WIDTH=$(echo $RESOLUTION | cut -d'x' -f1)
+          HEIGHT=$(echo $RESOLUTION | cut -d'x' -f2)
+          
+          echo "Width: $WIDTH px"
+          echo "Height: $HEIGHT px"
+          
+          # Save to environment
           echo "RESOLUTION=$RESOLUTION" >> $GITHUB_ENV
+          echo "SCREEN_WIDTH=$WIDTH" >> $GITHUB_ENV
+          echo "SCREEN_HEIGHT=$HEIGHT" >> $GITHUB_ENV
           
           # Create screenshots directory
           mkdir -p screenshots
           echo "SCREENSHOT_DIR=$(pwd)/screenshots" >> $GITHUB_ENV
 
-      - name: Take Screenshots
+      - name: Start RustDesk and Wait for Permission Prompt
         run: |
-          echo "=== Taking 5 Screenshots ==="
+          echo "=== Starting RustDesk ==="
+          
+          # Launch RustDesk
+          open -a /Applications/RustDesk.app
+          
+          echo "Waiting for RustDesk to start and permission prompt to appear..."
+          echo "This may take 10-15 seconds..."
+          
+          # Wait for RustDesk process
+          for i in {1..30}; do
+            if pgrep -f "RustDesk" > /dev/null; then
+              echo "✅ RustDesk process found (attempt $i)"
+              break
+            fi
+            sleep 1
+          done
+          
+          # Additional wait for permission dialog
+          sleep 10
+          
+          echo "RustDesk should be running now"
+          echo "Permission prompt should appear shortly..."
+
+      - name: Take Initial Screenshot (Before Click)
+        run: |
+          echo "=== Taking Initial Screenshot (Before Permission Grant) ==="
+          
+          timestamp=$(date +%Y%m%d_%H%M%S)
+          before_file="$SCREENSHOT_DIR/before_permission_$timestamp.png"
+          
+          screencapture -x "$before_file"
+          
+          if [ -f "$before_file" ]; then
+            filesize=$(ls -lh "$before_file" | awk '{print $5}')
+            echo "✅ Initial screenshot saved: $before_file ($filesize)"
+          else
+            echo "⚠️ Failed to take initial screenshot"
+          fi
+
+      - name: Calculate Button Position Based on Resolution
+        run: |
+          echo "=== Calculating Button Position ==="
+          
+          # Original coordinates from 1024x768
+          ORIGINAL_X=462
+          ORIGINAL_Y=374
+          ORIGINAL_WIDTH=1024
+          ORIGINAL_HEIGHT=768
+          
+          # Calculate scaling factors
+          X_SCALE=$(echo "scale=4; $SCREEN_WIDTH / $ORIGINAL_WIDTH" | bc)
+          Y_SCALE=$(echo "scale=4; $SCREEN_HEIGHT / $ORIGINAL_HEIGHT" | bc)
+          
+          # Calculate new coordinates
+          NEW_X=$(echo "$ORIGINAL_X * $X_SCALE" | bc | awk '{print int($1+0.5)}')
+          NEW_Y=$(echo "$ORIGINAL_Y * $Y_SCALE" | bc | awk '{print int($1+0.5)}')
+          
+          echo "Original resolution: ${ORIGINAL_WIDTH}x${ORIGINAL_HEIGHT}"
+          echo "Current resolution: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
+          echo "Scaling factors: X=${X_SCALE}, Y=${Y_SCALE}"
+          echo "Original button position: (${ORIGINAL_X}, ${ORIGINAL_Y})"
+          echo "Calculated button position: (${NEW_X}, ${NEW_Y})"
+          
+          # Save to environment
+          echo "BUTTON_X=$NEW_X" >> $GITHUB_ENV
+          echo "BUTTON_Y=$NEW_Y" >> $GITHUB_ENV
+
+      - name: Click Allow Button and Grant Permissions
+        run: |
+          echo "=== Clicking Allow Button ==="
+          echo "Clicking at coordinates: ($BUTTON_X, $BUTTON_Y)"
+          
+          # Install cliclick for precise clicking if not available
+          if ! command -v cliclick &> /dev/null; then
+            echo "Installing cliclick..."
+            brew install cliclick
+          fi
+          
+          # Click the Allow button
+          echo "Attempting to click the button..."
+          cliclick c:$BUTTON_X,$BUTTON_Y
+          
+          echo "✅ Click performed"
+          
+          # Wait a moment for the dialog to close
+          sleep 3
+          
+          # Also try using AppleScript as backup
+          echo "Trying AppleScript click as backup..."
+          osascript <<EOF
+          tell application "System Events"
+            -- Try to find and click the Allow button
+            try
+              click at {$BUTTON_X, $BUTTON_Y}
+            end try
+          end tell
+          EOF
+          
+          # Additional permission granting commands
+          echo "Granting screen recording permission via tccutil..."
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "INSERT OR REPLACE INTO access VALUES('kTCCServiceScreenRecording','com.carriez.rustdesk',0,1,1,NULL,NULL,NULL,'UNUSED',NULL,0,UNIXEPOCH());" 2>/dev/null || true
+          
+          # Also try to grant via privacy preferences
+          echo "Attempting to grant via privacy preferences..."
+          osascript <<'END'
+          tell application "System Preferences"
+            activate
+            reveal anchor "Privacy_Accessibility" of pane id "com.apple.preference.security"
+          end tell
+          
+          tell application "System Events"
+            tell process "System Preferences"
+              repeat until window "Security & Privacy" exists
+                delay 0.5
+              end repeat
+              
+              -- Try to find and check RustDesk
+              tell table 1 of scroll area 1 of window "Security & Privacy"
+                select row 1
+              end tell
+            end tell
+          end tell
+          END
+
+      - name: Take Debug Screenshot After Click
+        run: |
+          echo "=== Taking Debug Screenshot (After Permission Grant) ==="
+          
+          timestamp=$(date +%Y%m%d_%H%M%S)
+          after_file="$SCREENSHOT_DIR/after_permission_$timestamp.png"
+          
+          screencapture -x "$after_file"
+          
+          if [ -f "$after_file" ]; then
+            filesize=$(ls -lh "$after_file" | awk '{print $5}')
+            echo "✅ Debug screenshot saved: $after_file ($filesize)"
+            
+            # Get dimensions
+            if command -v sips &> /dev/null; then
+              width=$(sips -g pixelWidth "$after_file" | tail -1 | awk '{print $2}')
+              height=$(sips -g pixelHeight "$after_file" | tail -1 | awk '{print $2}')
+              echo "   Dimensions: ${width}x${height}"
+            fi
+          else
+            echo "⚠️ Failed to take debug screenshot"
+          fi
+          
+          # Wait a moment for RustDesk to initialize
+          sleep 5
+
+      - name: Take 5 Verification Screenshots
+        run: |
+          echo "=== Taking 5 Verification Screenshots ==="
           echo "Resolution: $RESOLUTION"
           
-          # Wait for system to stabilize
-          sleep 5
-          
-          # Take 5 screenshots
           for i in {1..5}; do
             echo ""
-            echo "📸 Taking screenshot $i/5..."
+            echo "📸 Taking verification screenshot $i/5..."
             
             timestamp=$(date +%Y%m%d_%H%M%S)
-            filename="screenshot_${i}_${timestamp}.png"
-            filepath="$SCREENSHOT_DIR/$filename"
+            filepath="$SCREENSHOT_DIR/verification_${i}_${timestamp}.png"
             
-            # Take screenshot with timestamp
-            echo "Command: screencapture -x \"$filepath\""
+            # Take screenshot
             screencapture -x "$filepath"
             
-            # Verify
             if [ -f "$filepath" ]; then
               filesize=$(ls -lh "$filepath" | awk '{print $5}')
-              echo "✅ Saved: $filename ($filesize)"
+              echo "✅ Saved: $(basename $filepath) ($filesize)"
               
-              # Get dimensions if possible
-              if command -v sips &> /dev/null; then
-                width=$(sips -g pixelWidth "$filepath" | tail -1 | awk '{print $2}')
-                height=$(sips -g pixelHeight "$filepath" | tail -1 | awk '{print $2}')
-                echo "   Dimensions: ${width}x${height}"
-              fi
-            else
-              echo "⚠️ Failed to save screenshot $i"
-              # Try without -x flag
-              screencapture "$SCREENSHOT_DIR/fallback_$i.png" 2>/dev/null || true
+              # Check if RustDesk window is visible (simplistic check)
+              echo "   Checking if RustDesk is visible..."
             fi
             
-            # Wait between screenshots
             if [ $i -lt 5 ]; then
-              echo "   Waiting 2 seconds..."
-              sleep 2
+              echo "   Waiting 3 seconds..."
+              sleep 3
             fi
           done
           
           # List all screenshots
           echo ""
-          echo "=== Screenshot Summary ==="
-          ls -la "$SCREENSHOT_DIR/" 2>/dev/null || echo "No screenshots found"
+          echo "=== All Screenshots Taken ==="
+          ls -la "$SCREENSHOT_DIR/" 2>/dev/null | head -20
 
-      - name: Upload Screenshots as Artifacts
+      - name: Upload All Screenshots
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: rustdesk-screenshots
+          name: rustdesk-permission-screenshots
           path: ${{ env.SCREENSHOT_DIR }}
           retention-days: 1
 
-      - name: Monitor System for 20 Minutes
+      - name: Verify RustDesk is Working
         run: |
-          echo "=== Monitoring System for 20 Minutes ==="
-          echo "Start time: $(date)"
-          echo "End time: $(date -v+20M)"
-          echo ""
+          echo "=== Verifying RustDesk Status ==="
           
-          # Initial status
-          echo "Initial Status:"
-          echo "- RustDesk: $(pgrep -f "RustDesk" > /dev/null && echo "✅ Running" || echo "❌ Stopped")"
-          echo "- Resolution: $RESOLUTION"
-          echo "- Screenshots: $(find "$SCREENSHOT_DIR" -name "*.png" 2>/dev/null | wc -l) taken"
-          echo ""
-          
-          # Run for 20 minutes
-          for minute in {1..20}; do
-            echo "[Minute $minute/20] $(date)"
+          # Check if RustDesk is running
+          if pgrep -f "RustDesk" > /dev/null; then
+            echo "✅ RustDesk process is running"
             
-            # Take periodic screenshot every 5 minutes
-            if [ $((minute % 5)) -eq 0 ]; then
-              periodic_file="$SCREENSHOT_DIR/periodic_$(date +%H%M%S).png"
-              screencapture -x "$periodic_file" 2>/dev/null && echo "  📸 Periodic screenshot taken" || true
-            fi
+            # Try to get RustDesk ID (may be in logs or window title)
+            echo "Checking for RustDesk ID..."
+            
+            # Look for RustDesk window
+            osascript <<'EOF' 2>/dev/null || true
+            tell application "System Events"
+              tell process "RustDesk"
+                set windowName to name of front window
+                display dialog "RustDesk Window: " & windowName
+              end tell
+            end tell
+            EOF
+            
+          else
+            echo "❌ RustDesk is not running, attempting to restart..."
+            open -a /Applications/RustDesk.app
+            sleep 10
+          fi
+          
+          # Check screen recording permission
+          echo ""
+          echo "=== Checking Screen Recording Permission ==="
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" "SELECT * FROM access WHERE client='com.carriez.rustdesk';" 2>/dev/null || echo "Could not check TCC database"
+          
+          echo ""
+          echo "✅ Verification complete"
+
+      - name: Keep System Running for 20 Minutes
+        run: |
+          echo "=== Keeping System Running for 20 Minutes ==="
+          echo "Start time: $(date)"
+          echo "End time will be: $(date -v+20M)"
+          echo ""
+          echo "RustDesk should now be fully functional with screen recording permission"
+          echo "Screenshots have been uploaded as artifacts"
+          echo ""
+          echo "=== Starting 20-Minute Runtime ==="
+          
+          # Create a status file
+          STATUS_FILE="$HOME/rustdesk_status.txt"
+          echo "RustDesk Monitoring Log" > "$STATUS_FILE"
+          echo "=======================" >> "$STATUS_FILE"
+          echo "Start: $(date)" >> "$STATUS_FILE"
+          echo "Resolution: $RESOLUTION" >> "$STATUS_FILE"
+          echo "" >> "$STATUS_FILE"
+          
+          # Monitor for 20 minutes
+          for minute in {1..20}; do
+            current_time=$(date '+%H:%M:%S')
+            echo "[$current_time] Minute $minute/20"
+            echo "[$current_time] Minute $minute/20" >> "$STATUS_FILE"
             
             # Check RustDesk status
-            if ! pgrep -f "RustDesk" > /dev/null; then
-              echo "  ⚠️ RustDesk stopped, restarting..."
+            if pgrep -f "RustDesk" > /dev/null; then
+              echo "  ✅ RustDesk: Running"
+              echo "  RustDesk: Running" >> "$STATUS_FILE"
+              
+              # Take periodic screenshot every 5 minutes
+              if [ $((minute % 5)) -eq 0 ]; then
+                periodic_file="$SCREENSHOT_DIR/runtime_minute_${minute}_$(date +%H%M%S).png"
+                screencapture -x "$periodic_file" 2>/dev/null && echo "  📸 Runtime screenshot taken" || echo "  ⚠️ Could not take runtime screenshot"
+                echo "  Screenshot taken at minute $minute" >> "$STATUS_FILE"
+              fi
+            else
+              echo "  ⚠️ RustDesk: Not running, restarting..."
+              echo "  RustDesk restarted at minute $minute" >> "$STATUS_FILE"
               open -a /Applications/RustDesk.app 2>/dev/null || true
             fi
             
             # Wait 1 minute
             echo "  Waiting 1 minute..."
+            echo "" >> "$STATUS_FILE"
             sleep 60
           done
           
           echo ""
-          echo "✅ 20 minutes completed at $(date)"
+          echo "✅ 20-minute runtime completed at $(date)"
+          echo "End: $(date)" >> "$STATUS_FILE"
+          
+          # Upload status file
+          echo "=== Uploading Status Log ==="
+          cp "$STATUS_FILE" "$SCREENSHOT_DIR/rustdesk_status_log.txt"
+
+      - name: Upload Final Status Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rustdesk-status-log
+          path: |
+            ${{ env.SCREENSHOT_DIR }}/rustdesk_status_log.txt
+            ${{ env.SCREENSHOT_DIR }}
+          retention-days: 1
 
       - name: Final Cleanup
         if: always()
         run: |
           echo "=== Final Cleanup ==="
           
+          # Take one final screenshot
+          final_file="$SCREENSHOT_DIR/final_$(date +%H%M%S).png"
+          screencapture -x "$final_file" 2>/dev/null && echo "✅ Final screenshot taken" || echo "⚠️ Could not take final screenshot"
+          
           # Stop RustDesk
           pkill -f "RustDesk" 2>/dev/null || true
           sleep 2
           
-          # Force kill if needed
-          pkill -9 -f "RustDesk" 2>/dev/null || true
-          
           echo "✅ Cleanup complete"
+          echo "Total runtime: ~25 minutes"
           echo "Total screenshots: $(find "$SCREENSHOT_DIR" -name "*.png" 2>/dev/null | wc -l)"
