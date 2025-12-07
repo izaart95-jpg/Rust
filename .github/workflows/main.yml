@@ -62,18 +62,13 @@ jobs:
           echo "BUTTON_X=$NEW_X" >> $GITHUB_ENV
           echo "BUTTON_Y=$NEW_Y" >> $GITHUB_ENV
 
-      - name: Click Allow Button
-        run: |
-          brew install cliclick
-          screencapture -x "$SCREENSHOT_DIR/debug_before_click.png"
-          cliclick c:$BUTTON_X,$BUTTON_Y
-          sleep 3
-          screencapture -x "$SCREENSHOT_DIR/debug_after_click.png"
-          osascript <<'END_APPLESCRIPT'
-tell application "System Events"
-    delay 1
-    click at {100, 100}
-end tell
+      - name: Click using AppleScript
+  run: |
+    osascript <<'END_APPLESCRIPT'
+    tell application "System Events"
+        delay 1
+        click at {100, 100}
+    end tell
 END_APPLESCRIPT
 
       - name: Take Verification Screenshots
