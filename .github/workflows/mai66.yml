@@ -9,45 +9,55 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # ================= SSHX =================
-      - name: Download and extract sshx
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          $env:DESKTOP_DIR = "$env:USERPROFILE\Desktop"
-          cd $env:DESKTOP_DIR
-          Invoke-WebRequest `
-            -Uri "https://sshx.s3.amazonaws.com/sshx-x86_64-pc-windows-msvc.zip" `
-            -OutFile "sshx.zip"
-          Expand-Archive -Path "sshx.zip" -DestinationPath "." -Force
-          Unblock-File "sshx.exe"
-          "SSHX_EXE=$env:DESKTOP_DIR\sshx.exe" | Out-File $env:GITHUB_ENV -Append
+# ================= SSHX =================
+- name: Start SSHX (keep alive)
+  shell: powershell
+  run: |
+    $ErrorActionPreference = "Stop"
 
-      - name: Run sshx and capture session URL
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          cd $env:DESKTOP_DIR
-          $outFile = "$env:DESKTOP_DIR\sshx_output.txt"
-          Start-Process `
-            -FilePath "cmd.exe" `
-            -ArgumentList "/c `"$env:SSHX_EXE > `"$outFile`" 2>&1`"" `
-            -NoNewWindow
-          Start-Sleep -Seconds 10
-          $content = Get-Content $outFile -Raw
-          $match = $content | Select-String -Pattern 'https://sshx\.io/s/\S+'
-          Write-Host ""
-          Write-Host "================ SSHX SESSION ================"
-          if ($match) {
-            $url = $match.Matches[0].Value
-            Write-Host "SSHX LINK: $url"
-            "SSHX_URL=$url" | Out-File $env:GITHUB_ENV -Append
-          } else {
-            Write-Host "SSHX link not detected"
-            Write-Host $content
-          }
-          Write-Host "=============================================="
-          Write-Host ""
+    $desktop = "$env:USERPROFILE\Desktop"
+    echo "DESKTOP_DIR=$desktop" >> $env:GITHUB_ENV
+
+    cd $desktop
+
+    Invoke-WebRequest `
+      -Uri "https://sshx.s3.amazonaws.com/sshx-x86_64-pc-windows-msvc.zip" `
+      -OutFile "sshx.zip"
+
+    Expand-Archive -Path "sshx.zip" -DestinationPath "." -Force
+    Unblock-File "sshx.exe"
+
+    echo "SSHX_EXE=$desktop\sshx.exe" >> $env:GITHUB_ENV
+
+    $outFile = "$desktop\sshx_output.txt"
+    echo "SSHX_OUT=$outFile" >> $env:GITHUB_ENV
+
+    # Start SSHX in background (same idea as node/ngrok)
+    $sshxJob = Start-Job -ScriptBlock {
+      param($exe, $out)
+      & $exe *> $out
+    } -ArgumentList "$desktop\sshx.exe", $outFile
+
+    echo "SSHX_JOB_ID=$($sshxJob.Id)" >> $env:GITHUB_ENV
+
+    Start-Sleep -Seconds 12
+
+    $content = Get-Content $outFile -Raw
+    $match = $content | Select-String -Pattern 'https://sshx\.io/s/\S+'
+
+    Write-Host ""
+    Write-Host "================ SSHX SESSION ================"
+    if ($match) {
+      $url = $match.Matches[0].Value
+      Write-Host "SSHX LINK: $url"
+      echo "SSHX_URL=$url" >> $env:GITHUB_ENV
+    } else {
+      Write-Host "SSHX link not detected"
+      Write-Host $content
+    }
+    Write-Host "=============================================="
+    Write-Host ""
+
 
       - name: Prepare Downloads directory
         shell: powershell
