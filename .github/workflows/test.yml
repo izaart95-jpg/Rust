@@ -1,9 +1,7 @@
 name: Windows Cloudflared Keep Alive
 
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-  # Optional: Schedule to run automatically (e.g., every day at midnight UTC)
   # schedule:
   #   - cron: '0 0 * * *'
 
@@ -11,7 +9,7 @@ jobs:
   keep-alive:
     runs-on: windows-latest
     
-    # Set a higher timeout if needed (Max is 6 hours = 360 minutes)
+    # Max timeout is 360 minutes (6 hours)
     timeout-minutes: 360
 
     steps:
@@ -37,7 +35,7 @@ jobs:
           Unblock-File "cloudflared.exe"
           echo "CLOUDFLARED_EXE=$desktop\cloudflared.exe" >> $env:GITHUB_ENV
 
-          # 3. Start a Dummy Web Server (Crucial Step)
+          # 3. Start a Dummy Web Server
           # Cloudflared needs a target. We create a simple HTTP listener on port 8080.
           Write-Host "Starting dummy web server on port 8080..."
           $listenerJob = Start-Job -ScriptBlock {
@@ -51,9 +49,10 @@ jobs:
                   $context = $listener.GetContext()
                   $response = $context.Response
                   $response.StatusCode = 200
-                  # Return a simple HTML page so you know it's working
+                  # Return a simple HTML page
                   $html = "<html><body><h1>GitHub Actions Keep Alive</h1><p>Running from Windows Runner</p></body></html>"
-                  $buffer = [System.Text.Encoding]UTF8.GetBytes($html)
+                  # FIXED: Added :: for static member access
+                  $buffer = [System.Text.Encoding]::UTF8.GetBytes($html) 
                   $response.ContentLength64 = $buffer.Length
                   $response.OutputStream.Write($buffer, 0, $buffer.Length)
                   $response.OutputStream.Close()
@@ -91,9 +90,8 @@ jobs:
             $url = $match.Matches[0].Value.Trim()
             Write-Host "TUNNEL URL: $url"
             
-            # Mask the URL in logs to prevent it from being redacted/hidden by GitHub runners
-            # (Sometimes GitHub auto-hides URLs that look like domains)
-            Write-Host "::add-mask::$url"
+            # Mask the URL in logs (optional but good practice)
+            echo "::add-mask::$url"
             
             # Save to ENV so subsequent steps can use it
             echo "TUNNEL_URL=$url" >> $env:GITHUB_ENV
@@ -119,10 +117,12 @@ jobs:
               
               # Optional: Check if the cloudflared process is still running
               $jobId = $env:CLOUDFLARED_JOB_ID
-              $job = Get-Job -Id $jobId -ErrorAction SilentlyContinue
-              if ($job.State -ne 'Running') {
-                  Write-Host "ERROR: Cloudflared job has stopped."
-                  Receive-Job -Id $jobId
-                  exit 1
+              if ($jobId) {
+                  $job = Get-Job -Id $jobId -ErrorAction SilentlyContinue
+                  if ($job -and $job.State -ne 'Running') {
+                      Write-Host "ERROR: Cloudflared job has stopped."
+                      Receive-Job -Id $jobId
+                      exit 1
+                  }
               }
           }
